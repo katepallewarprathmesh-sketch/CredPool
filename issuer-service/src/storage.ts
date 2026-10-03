@@ -1,0 +1,6 @@
+import{createCipheriv,createDecipheriv,randomBytes,scryptSync,createHash}from"node:crypto";import{mkdir,writeFile,readFile}from"node:fs/promises";import path from"node:path";
+const root=path.join(process.cwd(),".data","ipfs");
+export function encryptCredential(plaintext:string,holderSecret:string){const salt=randomBytes(16),iv=randomBytes(12),key=scryptSync(holderSecret,salt,32),cipher=createCipheriv("aes-256-gcm",key,iv);const body=Buffer.concat([cipher.update(plaintext,"utf8"),cipher.final()]);return Buffer.concat([salt,iv,cipher.getAuthTag(),body]);}
+export function decryptCredential(blob:Buffer,holderSecret:string){const salt=blob.subarray(0,16),iv=blob.subarray(16,28),tag=blob.subarray(28,44),body=blob.subarray(44),key=scryptSync(holderSecret,salt,32),d=createDecipheriv("aes-256-gcm",key,iv);d.setAuthTag(tag);return Buffer.concat([d.update(body),d.final()]).toString("utf8");}
+export async function uploadEncrypted(blob:Buffer){const cid="bafy"+createHash("sha256").update(blob).digest("hex");await mkdir(root,{recursive:true});await writeFile(path.join(root,cid),blob);return cid;}
+export async function downloadEncrypted(cid:string){if(!/^bafy[a-f0-9]{64}$/.test(cid))throw new Error("invalid CID");return readFile(path.join(root,cid));}

@@ -1,0 +1,14 @@
+node_modules/
+artifacts/
+cache/
+coverage/
+coverage.json
+typechain-types/
+dist/
+.env
+frontend/node_modules/
+frontend/dist/
+.DS_Store
+.data/
+*.tsbuildinfo
+deployments/hardhat.json

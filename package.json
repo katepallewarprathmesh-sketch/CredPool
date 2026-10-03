@@ -1,0 +1,38 @@
+{
+  "name": "credential-gated-defi",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "coverage": "hardhat coverage",
+    "gas": "REPORT_GAS=true hardhat test test/GatedPool.test.ts",
+    "deploy": "hardhat run scripts/deploy.ts",
+    "demo": "hardhat run scripts/demo.ts",
+    "issuer": "tsx issuer-service/src/server.ts",
+    "frontend": "npm --prefix frontend run dev",
+    "test:issuer": "mocha --require tsx/cjs issuer-service/test/**/*.test.ts",
+    "test:all": "npm test && npm run test:issuer"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "5.1.0",
+    "@types/chai": "^4.3.20",
+    "@types/express": "^5.0.0",
+    "@types/mocha": "^10.0.10",
+    "canonicalize": "^2.1.0",
+    "chai": "^4.5.0",
+    "cors": "^2.8.5",
+    "did-jwt": "^8.0.18",
+    "did-jwt-vc": "^4.0.16",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "express": "^5.1.0",
+    "hardhat": "^2.26.3",
+    "hardhat-gas-reporter": "^1.0.10",
+    "mocha": "^11.1.0",
+    "solidity-coverage": "^0.8.14",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
