@@ -1,14 +1,147 @@
-import {expect} from "chai"; import {ethers} from "hardhat"; import {time,loadFixture} from "@nomicfoundation/hardhat-network-helpers"; import {hash} from "./helpers/attestation";
-describe("Registries",()=>{async function fixture(){const [admin,issuer,user,other]=await ethers.getSigners();const IR=await ethers.getContractFactory("IssuerRegistry");const ir=await IR.deploy(admin.address);const CR=await ethers.getContractFactory("CredentialRegistry");const cr=await CR.deploy(await ir.getAddress(),admin.address);await ir.addIssuer(issuer.address,"Mock KYC");await cr.grantRole(await cr.BADGE_ROLE(),admin.address);return{admin,issuer,user,other,ir,cr};}
-it("IR-ADD-1: admin adds issuer and emits",async()=>{const{ir,admin,other}=await loadFixture(fixture);await expect(ir.connect(admin).addIssuer(other.address,"Bank")).to.emit(ir,"IssuerAdded").withArgs(other.address,"Bank");expect(await ir.isActive(other.address)).eq(true);});
-it("IR-ADD-2: non-admin add reverts",async()=>{const{ir,user,other}=await loadFixture(fixture);await expect(ir.connect(user).addIssuer(other.address,"X")).reverted;});
-it("IR-REMOVE-1: removal disables issuer and credential",async()=>{const{ir,cr,admin,issuer,user}=await loadFixture(fixture);const h=hash("a");await cr.anchor(h,issuer.address,user.address,1,(await time.latest())+100);await ir.removeIssuer(issuer.address);expect(await ir.isActive(issuer.address)).false;expect(await cr.isValid(h)).false;});
-it("CR-ANCHOR-1: only BADGE_ROLE anchors",async()=>{const{cr,user,issuer}=await loadFixture(fixture);await expect(cr.connect(user).anchor(hash("x"),issuer.address,user.address,1,(await time.latest())+100)).reverted;});
-it("CR-ANCHOR-2: duplicate hash reverts AlreadyAnchored",async()=>{const{cr,user,issuer}=await loadFixture(fixture);const h=hash("x");await cr.anchor(h,issuer.address,user.address,1,(await time.latest())+100);await expect(cr.anchor(h,issuer.address,user.address,1,(await time.latest())+200)).revertedWithCustomError(cr,"AlreadyAnchored");});
-it("CR-VALID-1: validity reacts to expiry revoke and issuer removal",async()=>{const{cr,ir,user,issuer}=await loadFixture(fixture);let now=await time.latest();let h=hash("fresh");await cr.anchor(h,issuer.address,user.address,1,now+10);expect(await cr.isValid(h)).true;await time.increase(11);expect(await cr.isValid(h)).false;h=hash("revoke");await cr.anchor(h,issuer.address,user.address,1,(await time.latest())+100);await cr.connect(issuer).revoke(h);expect(await cr.isValid(h)).false;h=hash("remove");await cr.anchor(h,issuer.address,user.address,1,(await time.latest())+100);await ir.removeIssuer(issuer.address);expect(await cr.isValid(h)).false;});
-it("CR-REVOKE-1: issuer and admin revoke but random cannot",async()=>{const{cr,user,other,issuer}=await loadFixture(fixture);for(const [label,who] of [["i",issuer],["a",undefined]] as const){const h=hash(label);await cr.anchor(h,issuer.address,user.address,1,(await time.latest())+100);if(who)await cr.connect(who).revoke(h);else await cr.revoke(h);expect((await cr.get(h)).revoked).true;}const h=hash("bad");await cr.anchor(h,issuer.address,user.address,1,(await time.latest())+100);await expect(cr.connect(other).revoke(h)).revertedWithCustomError(cr,"Unauthorized");});
-it("CR-REPLACE-1: new credential replaces active credential",async()=>{const{cr,user,issuer}=await loadFixture(fixture);const a=hash("a"),b=hash("b"),e=(await time.latest())+100;await cr.anchor(a,issuer.address,user.address,1,e);await cr.anchor(b,issuer.address,user.address,2,e);expect(await cr.activeCredentialOf(user.address)).eq(b);expect(await cr.isValid(a)).false;});});
+import { expect } from "chai";
+import { ethers } from "hardhat";
+import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { hash } from "./helpers/attestation";
+describe("Registries", () => {
+  async function fixture() {
+    const [admin, issuer, user, other] = await ethers.getSigners();
+    const IR = await ethers.getContractFactory("IssuerRegistry");
+    const ir = await IR.deploy(admin.address);
+    const CR = await ethers.getContractFactory("CredentialRegistry");
+    const cr = await CR.deploy(await ir.getAddress(), admin.address);
+    await ir.addIssuer(issuer.address, "Mock KYC");
+    await cr.grantRole(await cr.BADGE_ROLE(), admin.address);
+    return { admin, issuer, user, other, ir, cr };
+  }
+  it("IR-ADD-1: admin adds issuer and emits", async () => {
+    const { ir, admin, other } = await loadFixture(fixture);
+    await expect(ir.connect(admin).addIssuer(other.address, "Bank"))
+      .to.emit(ir, "IssuerAdded")
+      .withArgs(other.address, "Bank");
+    expect(await ir.isActive(other.address)).eq(true);
+  });
+  it("IR-ADD-2: non-admin add reverts", async () => {
+    const { ir, user, other } = await loadFixture(fixture);
+    await expect(ir.connect(user).addIssuer(other.address, "X")).reverted;
+  });
+  it("IR-REMOVE-1: removal disables issuer and credential", async () => {
+    const { ir, cr, admin, issuer, user } = await loadFixture(fixture);
+    const h = hash("a");
+    await cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 100);
+    await ir.removeIssuer(issuer.address);
+    expect(await ir.isActive(issuer.address)).false;
+    expect(await cr.isValid(h)).false;
+  });
+  it("CR-ANCHOR-1: only BADGE_ROLE anchors", async () => {
+    const { cr, user, issuer } = await loadFixture(fixture);
+    await expect(
+      cr
+        .connect(user)
+        .anchor(hash("x"), issuer.address, user.address, 1, (await time.latest()) + 100),
+    ).reverted;
+  });
+  it("CR-ANCHOR-2: duplicate hash reverts AlreadyAnchored", async () => {
+    const { cr, user, issuer } = await loadFixture(fixture);
+    const h = hash("x");
+    await cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 100);
+    await expect(
+      cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 200),
+    ).revertedWithCustomError(cr, "AlreadyAnchored");
+  });
+  it("CR-VALID-1: validity reacts to expiry revoke and issuer removal", async () => {
+    const { cr, ir, user, issuer } = await loadFixture(fixture);
+    let now = await time.latest();
+    let h = hash("fresh");
+    await cr.anchor(h, issuer.address, user.address, 1, now + 10);
+    expect(await cr.isValid(h)).true;
+    await time.increase(11);
+    expect(await cr.isValid(h)).false;
+    h = hash("revoke");
+    await cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 100);
+    await cr.connect(issuer).revoke(h);
+    expect(await cr.isValid(h)).false;
+    h = hash("remove");
+    await cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 100);
+    await ir.removeIssuer(issuer.address);
+    expect(await cr.isValid(h)).false;
+  });
+  it("CR-REVOKE-1: issuer and admin revoke but random cannot", async () => {
+    const { cr, user, other, issuer } = await loadFixture(fixture);
+    for (const [label, who] of [
+      ["i", issuer],
+      ["a", undefined],
+    ] as const) {
+      const h = hash(label);
+      await cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 100);
+      if (who) await cr.connect(who).revoke(h);
+      else await cr.revoke(h);
+      expect((await cr.get(h)).revoked).true;
+    }
+    const h = hash("bad");
+    await cr.anchor(h, issuer.address, user.address, 1, (await time.latest()) + 100);
+    await expect(cr.connect(other).revoke(h)).revertedWithCustomError(cr, "Unauthorized");
+  });
+  it("CR-REPLACE-1: new credential replaces active credential", async () => {
+    const { cr, user, issuer } = await loadFixture(fixture);
+    const a = hash("a"),
+      b = hash("b"),
+      e = (await time.latest()) + 100;
+    await cr.anchor(a, issuer.address, user.address, 1, e);
+    await cr.anchor(b, issuer.address, user.address, 2, e);
+    expect(await cr.activeCredentialOf(user.address)).eq(b);
+    expect(await cr.isValid(a)).false;
+  });
+});
 
-describe("Registry hardening branches",()=>{it("covers issuer update, invalid entries and credential errors",async()=>{const[a,i,u]=await ethers.getSigners();const IR=await ethers.getContractFactory("IssuerRegistry");await expect(IR.deploy(ethers.ZeroAddress)).revertedWithCustomError(IR,"InvalidIssuer");const ir=await IR.deploy(a.address);await expect(ir.addIssuer(ethers.ZeroAddress,"x")).revertedWithCustomError(ir,"InvalidIssuer");await expect(ir.addIssuer(i.address,"")).revertedWithCustomError(ir,"InvalidIssuer");await ir.addIssuer(i.address,"one");await expect(ir.addIssuer(i.address,"two")).to.emit(ir,"IssuerUpdated");expect((await ir.getIssuer(i.address)).name).eq("two");await expect(ir.connect(u).removeIssuer(i.address)).reverted;const CR=await ethers.getContractFactory("CredentialRegistry");await expect(CR.deploy(ethers.ZeroAddress,a.address)).revertedWithCustomError(CR,"InvalidCredential");const cr=await CR.deploy(await ir.getAddress(),a.address);await cr.grantRole(await cr.BADGE_ROLE(),a.address);await expect(cr.revoke(hash("none"))).revertedWithCustomError(cr,"UnknownCredential");for(const args of[[ethers.ZeroHash,i.address,u.address,1,(await time.latest())+10],[hash("z"),ethers.ZeroAddress,u.address,1,(await time.latest())+10],[hash("s"),i.address,ethers.ZeroAddress,1,(await time.latest())+10],[hash("t"),i.address,u.address,0,(await time.latest())+10],[hash("e"),i.address,u.address,1,(await time.latest())-1]]as any)await expect(cr.anchor(...args)).revertedWithCustomError(cr,"InvalidCredential");});});
+describe("Registry hardening branches", () => {
+  it("covers issuer update, invalid entries and credential errors", async () => {
+    const [a, i, u] = await ethers.getSigners();
+    const IR = await ethers.getContractFactory("IssuerRegistry");
+    await expect(IR.deploy(ethers.ZeroAddress)).revertedWithCustomError(IR, "InvalidIssuer");
+    const ir = await IR.deploy(a.address);
+    await expect(ir.addIssuer(ethers.ZeroAddress, "x")).revertedWithCustomError(
+      ir,
+      "InvalidIssuer",
+    );
+    await expect(ir.addIssuer(i.address, "")).revertedWithCustomError(ir, "InvalidIssuer");
+    await ir.addIssuer(i.address, "one");
+    await expect(ir.addIssuer(i.address, "two")).to.emit(ir, "IssuerUpdated");
+    expect((await ir.getIssuer(i.address)).name).eq("two");
+    await expect(ir.connect(u).removeIssuer(i.address)).reverted;
+    const CR = await ethers.getContractFactory("CredentialRegistry");
+    await expect(CR.deploy(ethers.ZeroAddress, a.address)).revertedWithCustomError(
+      CR,
+      "InvalidCredential",
+    );
+    const cr = await CR.deploy(await ir.getAddress(), a.address);
+    await cr.grantRole(await cr.BADGE_ROLE(), a.address);
+    await expect(cr.revoke(hash("none"))).revertedWithCustomError(cr, "UnknownCredential");
+    for (const args of [
+      [ethers.ZeroHash, i.address, u.address, 1, (await time.latest()) + 10],
+      [hash("z"), ethers.ZeroAddress, u.address, 1, (await time.latest()) + 10],
+      [hash("s"), i.address, ethers.ZeroAddress, 1, (await time.latest()) + 10],
+      [hash("t"), i.address, u.address, 0, (await time.latest()) + 10],
+      [hash("e"), i.address, u.address, 1, (await time.latest()) - 1],
+    ] as any)
+      await expect(cr.anchor(...args)).revertedWithCustomError(cr, "InvalidCredential");
+  });
+});
 
-describe("Remaining registry branches",()=>{it("covers secondary constructor and tier guards",async()=>{const[a,i,u]=await ethers.getSigners(),IR=await ethers.getContractFactory("IssuerRegistry"),ir=await IR.deploy(a.address),CR=await ethers.getContractFactory("CredentialRegistry");await expect(CR.deploy(await ir.getAddress(),ethers.ZeroAddress)).revertedWithCustomError(CR,"InvalidCredential");await ir.addIssuer(i.address,"i");const cr=await CR.deploy(await ir.getAddress(),a.address);await cr.grantRole(await cr.BADGE_ROLE(),a.address);await expect(cr.anchor(hash("tier4"),i.address,u.address,4,(await time.latest())+1)).revertedWithCustomError(cr,"InvalidCredential");});});
+describe("Remaining registry branches", () => {
+  it("covers secondary constructor and tier guards", async () => {
+    const [a, i, u] = await ethers.getSigners(),
+      IR = await ethers.getContractFactory("IssuerRegistry"),
+      ir = await IR.deploy(a.address),
+      CR = await ethers.getContractFactory("CredentialRegistry");
+    await expect(CR.deploy(await ir.getAddress(), ethers.ZeroAddress)).revertedWithCustomError(
+      CR,
+      "InvalidCredential",
+    );
+    await ir.addIssuer(i.address, "i");
+    const cr = await CR.deploy(await ir.getAddress(), a.address);
+    await cr.grantRole(await cr.BADGE_ROLE(), a.address);
+    await expect(
+      cr.anchor(hash("tier4"), i.address, u.address, 4, (await time.latest()) + 1),
+    ).revertedWithCustomError(cr, "InvalidCredential");
+  });
+});

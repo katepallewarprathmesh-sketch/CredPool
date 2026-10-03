@@ -13,8 +13,16 @@ describe("Issuer API security and verification", () => {
   });
 
   it("VC-VERIFY-1: resolves did:pkh and verifies the JWT signature", async () => {
-    const issuer = Wallet.createRandom(), holder = Wallet.createRandom();
-    const issued = await issueCredential(issuer.privateKey, holder.address, 2, 31337n, Wallet.createRandom().address, 0n);
+    const issuer = Wallet.createRandom(),
+      holder = Wallet.createRandom();
+    const issued = await issueCredential(
+      issuer.privateKey,
+      holder.address,
+      2,
+      31337n,
+      Wallet.createRandom().address,
+      0n,
+    );
     const app = require("../src/server").default;
     const response = await request(app).post("/credentials/verify").send({ vcJwt: issued.vcJwt });
     expect(response.status).eq(200);

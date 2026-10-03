@@ -23,6 +23,7 @@ Requirement keywords: **MUST**, **SHOULD**, **MAY** follow RFC 2119.
 Institutions want DeFi liquidity but need to restrict who can trade or provide liquidity. This project builds a permissioned AMM where access depends on a **W3C Verifiable Credential (VC)** issued to a **DID**, anchored on-chain, and represented as a non-transferable **ERC-1155 access badge**.
 
 ### In scope
+
 - DID creation (`did:pkh` / `did:ethr`) from an EVM wallet
 - Mock KYC issuer service that signs VCs
 - On-chain issuer registry, credential registry, soulbound badge, gated constant-product pool
@@ -31,11 +32,13 @@ Institutions want DeFi liquidity but need to restrict who can trade or provide l
 - Hardhat test suite, gas report, security checklist
 
 ### Out of scope (v1)
+
 - Real KYC providers, real fiat or legal compliance
 - Concentrated liquidity (future: swap in the CLMM from Project 1)
 - Mainnet deployment (testnet only: Sepolia)
 
 ### Stretch (v2)
+
 - ZK proof of credential claims (S-1)
 - Cross-chain badge mirroring via mock bridge (S-2)
 
@@ -43,12 +46,12 @@ Institutions want DeFi liquidity but need to restrict who can trade or provide l
 
 ## 2. Actors
 
-| Actor | Description |
-|---|---|
-| **Holder** | End user with a wallet and DID who wants to trade or provide liquidity |
-| **Issuer** | Trusted entity (mock KYC provider) that signs credentials |
-| **Admin** | Owner or governance multisig that manages the issuer registry and pool parameters |
-| **Verifier** | The smart contracts that check credentials on-chain |
+| Actor        | Description                                                                       |
+| ------------ | --------------------------------------------------------------------------------- |
+| **Holder**   | End user with a wallet and DID who wants to trade or provide liquidity            |
+| **Issuer**   | Trusted entity (mock KYC provider) that signs credentials                         |
+| **Admin**    | Owner or governance multisig that manages the issuer registry and pool parameters |
+| **Verifier** | The smart contracts that check credentials on-chain                               |
 
 ---
 
@@ -56,83 +59,83 @@ Institutions want DeFi liquidity but need to restrict who can trade or provide l
 
 ### 3.1 Identity and credentials (off-chain)
 
-| ID | Requirement |
-|---|---|
-| FR-ID-1 | The system MUST derive a DID from the holder's wallet address (`did:pkh:eip155:<chainId>:<address>`). |
-| FR-ID-2 | The issuer service MUST issue a VC (JWT format) whose `credentialSubject.id` is the holder's DID. |
-| FR-ID-3 | A VC MUST contain: `type`, `issuer` DID, `issuanceDate`, `expirationDate`, and `credentialSubject.tier` (1, 2, or 3). |
-| FR-ID-4 | The issuer service MUST sign an EIP-712 **Attestation** alongside the VC (see 5.2) so the contract can verify it without parsing JWTs. |
+| ID      | Requirement                                                                                                                                        |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-ID-1 | The system MUST derive a DID from the holder's wallet address (`did:pkh:eip155:<chainId>:<address>`).                                              |
+| FR-ID-2 | The issuer service MUST issue a VC (JWT format) whose `credentialSubject.id` is the holder's DID.                                                  |
+| FR-ID-3 | A VC MUST contain: `type`, `issuer` DID, `issuanceDate`, `expirationDate`, and `credentialSubject.tier` (1, 2, or 3).                              |
+| FR-ID-4 | The issuer service MUST sign an EIP-712 **Attestation** alongside the VC (see 5.2) so the contract can verify it without parsing JWTs.             |
 | FR-ID-5 | The VC MUST be encrypted client-side (or by the issuer with the holder's key) before IPFS upload. Only the CID and the credential hash are public. |
-| FR-ID-6 | The holder MUST be able to list, view, and re-download their credentials from the frontend. |
+| FR-ID-6 | The holder MUST be able to list, view, and re-download their credentials from the frontend.                                                        |
 
 ### 3.2 Issuer registry
 
-| ID | Requirement |
-|---|---|
-| FR-IR-1 | Admin MUST be able to add and remove trusted issuers. |
-| FR-IR-2 | Issuer entries MUST store: signer address, name, `active` flag, `addedAt`. |
+| ID      | Requirement                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------- |
+| FR-IR-1 | Admin MUST be able to add and remove trusted issuers.                                             |
+| FR-IR-2 | Issuer entries MUST store: signer address, name, `active` flag, `addedAt`.                        |
 | FR-IR-3 | Removing an issuer MUST invalidate all credentials that issuer produced (checked at verify time). |
-| FR-IR-4 | Events MUST be emitted for add, remove, and update. |
+| FR-IR-4 | Events MUST be emitted for add, remove, and update.                                               |
 
 ### 3.3 Credential registry
 
-| ID | Requirement |
-|---|---|
-| FR-CR-1 | A credential MUST be anchored by its `credentialHash` (keccak256 of the canonical VC payload). |
-| FR-CR-2 | Anchoring MUST store: `issuer`, `subject`, `tier`, `expiry`, `revoked`. |
-| FR-CR-3 | The issuer MUST be able to revoke a credential it issued. Admin MAY revoke any credential. |
+| ID      | Requirement                                                                                        |
+| ------- | -------------------------------------------------------------------------------------------------- |
+| FR-CR-1 | A credential MUST be anchored by its `credentialHash` (keccak256 of the canonical VC payload).     |
+| FR-CR-2 | Anchoring MUST store: `issuer`, `subject`, `tier`, `expiry`, `revoked`.                            |
+| FR-CR-3 | The issuer MUST be able to revoke a credential it issued. Admin MAY revoke any credential.         |
 | FR-CR-4 | `isValid(hash)` MUST return true only if: anchored, not revoked, not expired, issuer still active. |
-| FR-CR-5 | A hash MUST NOT be anchorable twice. |
-| FR-CR-6 | Each subject MAY hold one active credential at a time; a new one replaces the old one. |
+| FR-CR-5 | A hash MUST NOT be anchorable twice.                                                               |
+| FR-CR-6 | Each subject MAY hold one active credential at a time; a new one replaces the old one.             |
 
 ### 3.4 Access badge (ERC-1155)
 
-| ID | Requirement |
-|---|---|
-| FR-AB-1 | Token IDs: `1 = Basic`, `2 = Pro`, `3 = Institutional`. |
+| ID      | Requirement                                                                                                                                                 |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-AB-1 | Token IDs: `1 = Basic`, `2 = Pro`, `3 = Institutional`.                                                                                                     |
 | FR-AB-2 | The holder MUST claim a badge by submitting an issuer-signed attestation. The contract verifies the signature, anchors the credential, and mints the badge. |
-| FR-AB-3 | Badges MUST be **soulbound**: transfers between non-zero addresses MUST revert. Mint and burn are allowed. |
-| FR-AB-4 | Revoking or expiring a credential MUST make the badge unusable at the pool, and anyone MAY call `burnExpired(account)` to clean it up. |
-| FR-AB-5 | A holder MUST hold at most one tier at a time. Claiming a new tier burns the old badge. |
-| FR-AB-6 | Attestations MUST be replay-protected with a per-subject nonce and bound to `chainId` and the contract address (EIP-712 domain). |
+| FR-AB-3 | Badges MUST be **soulbound**: transfers between non-zero addresses MUST revert. Mint and burn are allowed.                                                  |
+| FR-AB-4 | Revoking or expiring a credential MUST make the badge unusable at the pool, and anyone MAY call `burnExpired(account)` to clean it up.                      |
+| FR-AB-5 | A holder MUST hold at most one tier at a time. Claiming a new tier burns the old badge.                                                                     |
+| FR-AB-6 | Attestations MUST be replay-protected with a per-subject nonce and bound to `chainId` and the contract address (EIP-712 domain).                            |
 
 ### 3.5 Gated pool
 
-| ID | Requirement |
-|---|---|
-| FR-GP-1 | The pool MUST implement a constant-product AMM (`x * y = k`) for one ERC-20 pair. |
-| FR-GP-2 | Swap fee MUST default to 0.30% and be configurable by admin within [0.01%, 1%]. |
-| FR-GP-3 | `swap`, `addLiquidity`, `removeLiquidity` MUST all be guarded by `onlyVerified(minTier)`. |
-| FR-GP-4 | Minimum tier: swap requires **Basic+**, add/remove liquidity requires **Pro+**. |
+| ID      | Requirement                                                                                                                                         |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-GP-1 | The pool MUST implement a constant-product AMM (`x * y = k`) for one ERC-20 pair.                                                                   |
+| FR-GP-2 | Swap fee MUST default to 0.30% and be configurable by admin within [0.01%, 1%].                                                                     |
+| FR-GP-3 | `swap`, `addLiquidity`, `removeLiquidity` MUST all be guarded by `onlyVerified(minTier)`.                                                           |
+| FR-GP-4 | Minimum tier: swap requires **Basic+**, add/remove liquidity requires **Pro+**.                                                                     |
 | FR-GP-5 | Rolling 24-hour swap-volume limit per holder by tier (configurable): Basic 1,000, Pro 50,000, Institutional unlimited (in token0-equivalent units). |
-| FR-GP-6 | LP shares MUST be an internal ERC-20 (`GatedLP`). Transfers of LP tokens MAY be allowed, but `removeLiquidity` still requires a valid badge. |
-| FR-GP-7 | `swap` MUST take `minAmountOut` and `deadline`, and revert on violation. |
-| FR-GP-8 | The first liquidity provider MUST lock `MINIMUM_LIQUIDITY` (1000 wei of shares) permanently. |
-| FR-GP-9 | Admin MUST be able to pause and unpause the pool. Withdrawals SHOULD remain possible for verified users while paused (emergency exit). |
+| FR-GP-6 | LP shares MUST be an internal ERC-20 (`GatedLP`). Transfers of LP tokens MAY be allowed, but `removeLiquidity` still requires a valid badge.        |
+| FR-GP-7 | `swap` MUST take `minAmountOut` and `deadline`, and revert on violation.                                                                            |
+| FR-GP-8 | The first liquidity provider MUST lock `MINIMUM_LIQUIDITY` (1000 wei of shares) permanently.                                                        |
+| FR-GP-9 | Admin MUST be able to pause and unpause the pool. Withdrawals SHOULD remain possible for verified users while paused (emergency exit).              |
 
 ### 3.6 Frontend
 
-| ID | Requirement |
-|---|---|
-| FR-UI-1 | Connect wallet (MetaMask / WalletConnect) and show DID and network. |
-| FR-UI-2 | "Get verified" flow: request VC, sign, claim badge, show tier and expiry. |
+| ID      | Requirement                                                                                                |
+| ------- | ---------------------------------------------------------------------------------------------------------- |
+| FR-UI-1 | Connect wallet (MetaMask / WalletConnect) and show DID and network.                                        |
+| FR-UI-2 | "Get verified" flow: request VC, sign, claim badge, show tier and expiry.                                  |
 | FR-UI-3 | Swap form with quote, price impact, slippage setting, and disabled state with explanation when unverified. |
-| FR-UI-4 | Liquidity form (add/remove) shown only to Pro+. |
-| FR-UI-5 | Credentials page: status (valid / expired / revoked), IPFS CID, revoke-status polling. |
+| FR-UI-4 | Liquidity form (add/remove) shown only to Pro+.                                                            |
+| FR-UI-5 | Credentials page: status (valid / expired / revoked), IPFS CID, revoke-status polling.                     |
 
 ---
 
 ## 4. Non-functional requirements
 
-| ID | Requirement |
-|---|---|
+| ID    | Requirement                                                                                                                  |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------- |
 | NFR-1 | **Security:** no reentrancy, checks-effects-interactions, `SafeERC20`, custom errors, role-based access via `AccessControl`. |
-| NFR-2 | **Test coverage:** at least 95% line and 90% branch coverage on contracts. |
-| NFR-3 | **Gas:** `swap` SHOULD cost under 130k gas including the credential check; report published via `hardhat-gas-reporter`. |
-| NFR-4 | **Privacy:** no personal data on-chain or in plaintext on IPFS. |
-| NFR-5 | **Upgradeability:** v1 is non-upgradeable; parameters are changed through admin setters only. |
-| NFR-6 | **Static analysis:** Slither runs clean of high/medium findings (or each is documented as a false positive). |
-| NFR-7 | **Reproducibility:** one command to deploy locally and seed demo data (`npm run demo`). |
+| NFR-2 | **Test coverage:** at least 95% line and 90% branch coverage on contracts.                                                   |
+| NFR-3 | **Gas:** `swap` SHOULD cost under 130k gas including the credential check; report published via `hardhat-gas-reporter`.      |
+| NFR-4 | **Privacy:** no personal data on-chain or in plaintext on IPFS.                                                              |
+| NFR-5 | **Upgradeability:** v1 is non-upgradeable; parameters are changed through admin setters only.                                |
+| NFR-6 | **Static analysis:** Slither runs clean of high/medium findings (or each is documented as a false positive).                 |
+| NFR-7 | **Reproducibility:** one command to deploy locally and seed demo data (`npm run demo`).                                      |
 
 ---
 
@@ -213,15 +216,19 @@ CredPool/
 
 ```solidity
 interface IIssuerRegistry {
-    struct Issuer { string name; bool active; uint64 addedAt; }
+  struct Issuer {
+    string name;
+    bool active;
+    uint64 addedAt;
+  }
 
-    event IssuerAdded(address indexed signer, string name);
-    event IssuerRemoved(address indexed signer);
+  event IssuerAdded(address indexed signer, string name);
+  event IssuerRemoved(address indexed signer);
 
-    function addIssuer(address signer, string calldata name) external;   // ADMIN_ROLE
-    function removeIssuer(address signer) external;                      // ADMIN_ROLE
-    function isActive(address signer) external view returns (bool);
-    function getIssuer(address signer) external view returns (Issuer memory);
+  function addIssuer(address signer, string calldata name) external; // ADMIN_ROLE
+  function removeIssuer(address signer) external; // ADMIN_ROLE
+  function isActive(address signer) external view returns (bool);
+  function getIssuer(address signer) external view returns (Issuer memory);
 }
 ```
 
@@ -229,19 +236,34 @@ interface IIssuerRegistry {
 
 ```solidity
 interface ICredentialRegistry {
-    struct Credential {
-        address issuer; address subject; uint8 tier;
-        uint64 expiry; bool revoked;
-    }
+  struct Credential {
+    address issuer;
+    address subject;
+    uint8 tier;
+    uint64 expiry;
+    bool revoked;
+  }
 
-    event CredentialAnchored(bytes32 indexed hash, address indexed subject, address indexed issuer, uint8 tier, uint64 expiry);
-    event CredentialRevoked(bytes32 indexed hash, address indexed by);
+  event CredentialAnchored(
+    bytes32 indexed hash,
+    address indexed subject,
+    address indexed issuer,
+    uint8 tier,
+    uint64 expiry
+  );
+  event CredentialRevoked(bytes32 indexed hash, address indexed by);
 
-    function anchor(bytes32 hash, address issuer, address subject, uint8 tier, uint64 expiry) external; // BADGE_ROLE only
-    function revoke(bytes32 hash) external;                 // issuer of the credential or ADMIN_ROLE
-    function isValid(bytes32 hash) external view returns (bool);
-    function activeCredentialOf(address subject) external view returns (bytes32);
-    function get(bytes32 hash) external view returns (Credential memory);
+  function anchor(
+    bytes32 hash,
+    address issuer,
+    address subject,
+    uint8 tier,
+    uint64 expiry
+  ) external; // BADGE_ROLE only
+  function revoke(bytes32 hash) external; // issuer of the credential or ADMIN_ROLE
+  function isValid(bytes32 hash) external view returns (bool);
+  function activeCredentialOf(address subject) external view returns (bytes32);
+  function get(bytes32 hash) external view returns (Credential memory);
 }
 ```
 
@@ -249,15 +271,21 @@ interface ICredentialRegistry {
 
 ```solidity
 interface IAccessBadge {
-    struct Attestation { address subject; uint8 tier; bytes32 credentialHash; uint64 expiry; uint256 nonce; }
+  struct Attestation {
+    address subject;
+    uint8 tier;
+    bytes32 credentialHash;
+    uint64 expiry;
+    uint256 nonce;
+  }
 
-    event BadgeClaimed(address indexed subject, uint8 tier, bytes32 credentialHash);
+  event BadgeClaimed(address indexed subject, uint8 tier, bytes32 credentialHash);
 
-    function claim(Attestation calldata att, bytes calldata signature) external;
-    function burnExpired(address account) external;
-    function tierOf(address account) external view returns (uint8);       // 0 if none/invalid
-    function hasValidTier(address account, uint8 minTier) external view returns (bool);
-    function nonces(address subject) external view returns (uint256);
+  function claim(Attestation calldata att, bytes calldata signature) external;
+  function burnExpired(address account) external;
+  function tierOf(address account) external view returns (uint8); // 0 if none/invalid
+  function hasValidTier(address account, uint8 minTier) external view returns (bool);
+  function nonces(address subject) external view returns (uint256);
 }
 ```
 
@@ -267,18 +295,35 @@ interface IAccessBadge {
 
 ```solidity
 interface IGatedPool {
-    event Swap(address indexed user, address tokenIn, uint256 amountIn, uint256 amountOut);
-    event LiquidityAdded(address indexed user, uint256 amount0, uint256 amount1, uint256 shares);
-    event LiquidityRemoved(address indexed user, uint256 amount0, uint256 amount1, uint256 shares);
+  event Swap(address indexed user, address tokenIn, uint256 amountIn, uint256 amountOut);
+  event LiquidityAdded(address indexed user, uint256 amount0, uint256 amount1, uint256 shares);
+  event LiquidityRemoved(address indexed user, uint256 amount0, uint256 amount1, uint256 shares);
 
-    function swap(address tokenIn, uint256 amountIn, uint256 minAmountOut, uint256 deadline) external returns (uint256 amountOut);
-    function addLiquidity(uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min, uint256 deadline) external returns (uint256 shares);
-    function removeLiquidity(uint256 shares, uint256 amount0Min, uint256 amount1Min, uint256 deadline) external returns (uint256 amount0, uint256 amount1);
-    function getAmountOut(address tokenIn, uint256 amountIn) external view returns (uint256);
+  function swap(
+    address tokenIn,
+    uint256 amountIn,
+    uint256 minAmountOut,
+    uint256 deadline
+  ) external returns (uint256 amountOut);
+  function addLiquidity(
+    uint256 amount0Desired,
+    uint256 amount1Desired,
+    uint256 amount0Min,
+    uint256 amount1Min,
+    uint256 deadline
+  ) external returns (uint256 shares);
+  function removeLiquidity(
+    uint256 shares,
+    uint256 amount0Min,
+    uint256 amount1Min,
+    uint256 deadline
+  ) external returns (uint256 amount0, uint256 amount1);
+  function getAmountOut(address tokenIn, uint256 amountIn) external view returns (uint256);
 
-    function setFee(uint16 feeBps) external;                      // ADMIN_ROLE
-    function setTierLimit(uint8 tier, uint256 maxSwap) external;  // ADMIN_ROLE
-    function pause() external;  function unpause() external;      // ADMIN_ROLE
+  function setFee(uint16 feeBps) external; // ADMIN_ROLE
+  function setTierLimit(uint8 tier, uint256 maxSwap) external; // ADMIN_ROLE
+  function pause() external;
+  function unpause() external; // ADMIN_ROLE
 }
 ```
 
@@ -289,6 +334,7 @@ Errors (custom): `NotVerified(uint8 required)`, `Expired()`, `Slippage()`, `Limi
 ## 7. State machines
 
 ### Credential lifecycle
+
 ```
 (none) --claim--> ACTIVE --revoke--> REVOKED
                     │
@@ -297,6 +343,7 @@ Errors (custom): `NotVerified(uint8 required)`, `Expired()`, `Slippage()`, `Limi
 ```
 
 ### Holder access
+
 ```
 UNVERIFIED --claim(tier=1)--> BASIC --claim(tier=2)--> PRO --claim(tier=3)--> INSTITUTIONAL
      ▲                           │ (any state) revoke / expire / issuer removed
@@ -307,19 +354,19 @@ UNVERIFIED --claim(tier=1)--> BASIC --claim(tier=2)--> PRO --claim(tier=3)--> IN
 
 ## 8. Security considerations
 
-| Risk | Mitigation | Test |
-|---|---|---|
-| Attestation replay (same chain or cross-chain) | EIP-712 domain with chainId + contract; per-subject nonce | AB-REPLAY-1, AB-REPLAY-2 |
-| Signature malleability | OpenZeppelin `ECDSA` (rejects high-s) | AB-SIG-3 |
-| Compromised issuer | Admin removes issuer; all its credentials become invalid at verify time | IR-REMOVE-1, GP-ISSUER-1 |
-| Sybil / badge transfer | Soulbound ERC-1155 | AB-SOUL-1 |
-| Stale badge after revocation | Pool calls `hasValidTier`, which checks the registry live | GP-REVOKE-1 |
-| First-depositor share inflation | `MINIMUM_LIQUIDITY` lock | GP-LP-3 |
-| Reentrancy (ERC-777-like tokens) | `ReentrancyGuard`, CEI ordering | GP-REENT-1 |
-| Price manipulation / sandwich | `minAmountOut`, `deadline` (no on-chain oracle used) | GP-SLIP-1 |
-| Fee-on-transfer tokens | Compute amounts from balance deltas, or explicitly reject | GP-FOT-1 |
-| Admin key risk | `AccessControl` roles; use multisig in deployment script | n/a |
-| Privacy leak | No PII in VC `credentialSubject` beyond tier; encrypted on IPFS | manual review |
+| Risk                                           | Mitigation                                                              | Test                     |
+| ---------------------------------------------- | ----------------------------------------------------------------------- | ------------------------ |
+| Attestation replay (same chain or cross-chain) | EIP-712 domain with chainId + contract; per-subject nonce               | AB-REPLAY-1, AB-REPLAY-2 |
+| Signature malleability                         | OpenZeppelin `ECDSA` (rejects high-s)                                   | AB-SIG-3                 |
+| Compromised issuer                             | Admin removes issuer; all its credentials become invalid at verify time | IR-REMOVE-1, GP-ISSUER-1 |
+| Sybil / badge transfer                         | Soulbound ERC-1155                                                      | AB-SOUL-1                |
+| Stale badge after revocation                   | Pool calls `hasValidTier`, which checks the registry live               | GP-REVOKE-1              |
+| First-depositor share inflation                | `MINIMUM_LIQUIDITY` lock                                                | GP-LP-3                  |
+| Reentrancy (ERC-777-like tokens)               | `ReentrancyGuard`, CEI ordering                                         | GP-REENT-1               |
+| Price manipulation / sandwich                  | `minAmountOut`, `deadline` (no on-chain oracle used)                    | GP-SLIP-1                |
+| Fee-on-transfer tokens                         | Compute amounts from balance deltas, or explicitly reject               | GP-FOT-1                 |
+| Admin key risk                                 | `AccessControl` roles; use multisig in deployment script                | n/a                      |
+| Privacy leak                                   | No PII in VC `credentialSubject` beyond tier; encrypted on IPFS         | manual review            |
 
 A `docs/SECURITY.md` MUST list Slither output, manual review notes, and known limitations.
 
@@ -330,11 +377,13 @@ A `docs/SECURITY.md` MUST list Slither output, manual review notes, and known li
 Each ID below MUST exist as a named test (`it("AB-SOUL-1: ...")`).
 
 ### IssuerRegistry
+
 - **IR-ADD-1** Admin adds an issuer; `isActive` is true; event emitted.
 - **IR-ADD-2** Non-admin add reverts.
 - **IR-REMOVE-1** Removing an issuer makes `isActive` false and invalidates its credentials.
 
 ### CredentialRegistry
+
 - **CR-ANCHOR-1** Only `BADGE_ROLE` can anchor.
 - **CR-ANCHOR-2** Anchoring the same hash twice reverts `AlreadyAnchored`.
 - **CR-VALID-1** `isValid` is true for fresh credentials; false after expiry (time travel); false after revoke; false after issuer removal.
@@ -342,6 +391,7 @@ Each ID below MUST exist as a named test (`it("AB-SOUL-1: ...")`).
 - **CR-REPLACE-1** A new credential for the same subject replaces `activeCredentialOf`.
 
 ### AccessBadge
+
 - **AB-CLAIM-1** Valid attestation mints the correct tier to `subject`.
 - **AB-CLAIM-2** Attestation from a non-registered signer reverts `InvalidSignature`.
 - **AB-CLAIM-3** Expired attestation reverts `Expired`.
@@ -354,6 +404,7 @@ Each ID below MUST exist as a named test (`it("AB-SOUL-1: ...")`).
 - **AB-EXPIRE-1** After expiry `tierOf` returns 0 and `burnExpired` burns the badge.
 
 ### GatedPool
+
 - **GP-ACCESS-1** Unverified address cannot swap or add liquidity.
 - **GP-ACCESS-2** Basic can swap but cannot add liquidity.
 - **GP-ACCESS-3** Pro and Institutional can do both.
@@ -372,6 +423,7 @@ Each ID below MUST exist as a named test (`it("AB-SOUL-1: ...")`).
 - **GP-FUZZ-1** Property: for random swap sequences, `reserve0 * reserve1` is non-decreasing.
 
 ### Integration (end-to-end, local chain)
+
 - **E2E-1** Issuer service issues a VC → holder claims badge → holder swaps → issuer revokes → swap fails.
 - **E2E-2** Holder upgrades Basic → Pro → can now add liquidity.
 - **E2E-3** VC uploaded to IPFS is retrievable, decryptable by the holder, and its hash matches the on-chain `credentialHash`.
@@ -382,14 +434,15 @@ Each ID below MUST exist as a named test (`it("AB-SOUL-1: ...")`).
 
 Base URL: `http://localhost:4000`
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/credentials/request` | Body `{ address, tier, kycPayload }` (mock). Returns `{ vcJwt, attestation, signature, credentialHash }`. |
-| POST | `/credentials/:hash/revoke` | Issuer-authenticated. Sends the on-chain `revoke` transaction. |
-| GET | `/credentials/:hash/status` | Returns `valid / expired / revoked` by reading the chain. |
-| GET | `/.well-known/did.json` | Issuer DID document. |
+| Method | Path                        | Description                                                                                               |
+| ------ | --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| POST   | `/credentials/request`      | Body `{ address, tier, kycPayload }` (mock). Returns `{ vcJwt, attestation, signature, credentialHash }`. |
+| POST   | `/credentials/:hash/revoke` | Issuer-authenticated. Sends the on-chain `revoke` transaction.                                            |
+| GET    | `/credentials/:hash/status` | Returns `valid / expired / revoked` by reading the chain.                                                 |
+| GET    | `/.well-known/did.json`     | Issuer DID document.                                                                                      |
 
 Rules:
+
 - The mock KYC check MUST be deterministic (e.g. address allowlist or a passcode) so tests are repeatable.
 - The issuer private key MUST be loaded from env (`ISSUER_PK`), never committed.
 - `credentialHash = keccak256(canonicalize(vcPayload))` using RFC 8785 JSON canonicalization.
@@ -401,43 +454,51 @@ Rules:
 Each task lists its inputs (requirements) and its done criteria (tests).
 
 ### Phase 0: Setup (Day 1)
-- [ ] **T0.1** Init Hardhat (TypeScript), OpenZeppelin v5, gas reporter, solidity-coverage, Slither config. *Done: `npx hardhat test` runs an empty suite.*
+
+- [ ] **T0.1** Init Hardhat (TypeScript), OpenZeppelin v5, gas reporter, solidity-coverage, Slither config. _Done: `npx hardhat test` runs an empty suite._
 - [ ] **T0.2** Add `MockERC20`, EIP-712 test helper (`helpers/attestation.ts`).
 
 ### Phase 1: Registries (Days 2-4)
-- [ ] **T1.1** `IssuerRegistry` with `AccessControl`. *FR-IR-1..4; tests IR-\**
-- [ ] **T1.2** `CredentialRegistry`. *FR-CR-1..6; tests CR-\**
+
+- [ ] **T1.1** `IssuerRegistry` with `AccessControl`. \*FR-IR-1..4; tests IR-\*\*
+- [ ] **T1.2** `CredentialRegistry`. \*FR-CR-1..6; tests CR-\*\*
 
 ### Phase 2: Badge (Days 5-8)
-- [ ] **T2.1** `AccessBadge` ERC-1155 with soulbound `_update` override. *FR-AB-1, 3*
-- [ ] **T2.2** EIP-712 `claim` with nonce and signature checks. *FR-AB-2, 5, 6; tests AB-CLAIM, AB-REPLAY, AB-SIG*
-- [ ] **T2.3** `tierOf`, `hasValidTier`, `burnExpired`. *FR-AB-4; tests AB-EXPIRE-1*
+
+- [ ] **T2.1** `AccessBadge` ERC-1155 with soulbound `_update` override. _FR-AB-1, 3_
+- [ ] **T2.2** EIP-712 `claim` with nonce and signature checks. _FR-AB-2, 5, 6; tests AB-CLAIM, AB-REPLAY, AB-SIG_
+- [ ] **T2.3** `tierOf`, `hasValidTier`, `burnExpired`. _FR-AB-4; tests AB-EXPIRE-1_
 
 ### Phase 3: Pool (Days 9-14)
-- [ ] **T3.1** `GatedLP` + `GatedPool` constant-product core (no gating yet). *FR-GP-1, 2, 6, 7, 8; tests GP-LP, GP-SWAP, GP-SLIP*
-- [ ] **T3.2** Add `onlyVerified(minTier)` and tier limits. *FR-GP-3..5; tests GP-ACCESS, GP-LIMIT, GP-REVOKE, GP-ISSUER*
-- [ ] **T3.3** Pause, emergency exit, reentrancy guard, fee setter. *FR-GP-9; tests GP-PAUSE, GP-REENT*
-- [ ] **T3.4** Fuzz and invariant tests. *GP-FUZZ-1*
+
+- [ ] **T3.1** `GatedLP` + `GatedPool` constant-product core (no gating yet). _FR-GP-1, 2, 6, 7, 8; tests GP-LP, GP-SWAP, GP-SLIP_
+- [ ] **T3.2** Add `onlyVerified(minTier)` and tier limits. _FR-GP-3..5; tests GP-ACCESS, GP-LIMIT, GP-REVOKE, GP-ISSUER_
+- [ ] **T3.3** Pause, emergency exit, reentrancy guard, fee setter. _FR-GP-9; tests GP-PAUSE, GP-REENT_
+- [ ] **T3.4** Fuzz and invariant tests. _GP-FUZZ-1_
 
 ### Phase 4: Off-chain (Days 15-19)
-- [ ] **T4.1** Issuer service: DID doc, VC issuance with `did-jwt-vc`, EIP-712 signing. *FR-ID-1..4*
-- [ ] **T4.2** Encryption + IPFS upload/download module. *FR-ID-5; E2E-3*
-- [ ] **T4.3** Deploy + seed scripts, local demo (`npm run demo`). *NFR-7*
+
+- [ ] **T4.1** Issuer service: DID doc, VC issuance with `did-jwt-vc`, EIP-712 signing. _FR-ID-1..4_
+- [ ] **T4.2** Encryption + IPFS upload/download module. _FR-ID-5; E2E-3_
+- [ ] **T4.3** Deploy + seed scripts, local demo (`npm run demo`). _NFR-7_
 - [ ] **T4.4** Integration tests E2E-1..3.
 
 ### Phase 5: Frontend (Days 20-26)
-- [ ] **T5.1** Wallet connect, network guard, DID display. *FR-UI-1*
-- [ ] **T5.2** "Get verified" flow. *FR-UI-2*
-- [ ] **T5.3** Swap UI with quote, slippage, gated states. *FR-UI-3*
-- [ ] **T5.4** Liquidity UI + credentials page. *FR-UI-4, 5*
+
+- [ ] **T5.1** Wallet connect, network guard, DID display. _FR-UI-1_
+- [ ] **T5.2** "Get verified" flow. _FR-UI-2_
+- [ ] **T5.3** Swap UI with quote, slippage, gated states. _FR-UI-3_
+- [ ] **T5.4** Liquidity UI + credentials page. _FR-UI-4, 5_
 
 ### Phase 6: Hardening (Days 27-30)
-- [ ] **T6.1** Coverage ≥ 95/90. *NFR-2*
-- [ ] **T6.2** Gas optimization pass (storage packing, `immutable`, custom errors) and `docs/GAS.md` with before/after. *NFR-3*
-- [ ] **T6.3** Slither run, write `docs/SECURITY.md`. *NFR-6, section 8*
+
+- [ ] **T6.1** Coverage ≥ 95/90. _NFR-2_
+- [ ] **T6.2** Gas optimization pass (storage packing, `immutable`, custom errors) and `docs/GAS.md` with before/after. _NFR-3_
+- [ ] **T6.3** Slither run, write `docs/SECURITY.md`. _NFR-6, section 8_
 - [ ] **T6.4** Deploy to Sepolia, verify on Etherscan, record addresses in README.
 
 ### Phase 7: Stretch
+
 - [ ] **S-1** ZK proof of claim ("tier ≥ 2" without revealing the credential), using Circom/snarkjs or Noir.
 - [ ] **S-2** Mock cross-chain bridge: `BadgeMirror` on chain B accepts a message from chain A's `AccessBadge` and mints a mirrored badge; revocation messages burn it.
 
@@ -445,15 +506,15 @@ Each task lists its inputs (requirements) and its done criteria (tests).
 
 ## 12. Traceability matrix
 
-| Requirement | Contract / module | Tests |
-|---|---|---|
-| FR-ID-1..6 | issuer-service, frontend | E2E-1, E2E-3 |
-| FR-IR-1..4 | IssuerRegistry | IR-\* |
-| FR-CR-1..6 | CredentialRegistry | CR-\* |
-| FR-AB-1..6 | AccessBadge | AB-\* |
-| FR-GP-1..9 | GatedPool, GatedLP | GP-\* |
-| FR-UI-1..5 | frontend | manual + Playwright smoke |
-| NFR-1..7 | all | coverage, Slither, gas report |
+| Requirement | Contract / module        | Tests                         |
+| ----------- | ------------------------ | ----------------------------- |
+| FR-ID-1..6  | issuer-service, frontend | E2E-1, E2E-3                  |
+| FR-IR-1..4  | IssuerRegistry           | IR-\*                         |
+| FR-CR-1..6  | CredentialRegistry       | CR-\*                         |
+| FR-AB-1..6  | AccessBadge              | AB-\*                         |
+| FR-GP-1..9  | GatedPool, GatedLP       | GP-\*                         |
+| FR-UI-1..5  | frontend                 | manual + Playwright smoke     |
+| NFR-1..7    | all                      | coverage, Slither, gas report |
 
 Update this table whenever a requirement is added or changed. A requirement with no test is not done.
 

@@ -1,1 +1,1 @@
-module.exports = { skipFiles: ['mocks/ReentrantToken.sol'] };
+module.exports = { skipFiles: ["mocks/ReentrantToken.sol"] };

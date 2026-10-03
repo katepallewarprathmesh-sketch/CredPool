@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 interface IIssuerRegistry {
-    struct Issuer { string name; bool active; uint64 addedAt; }
+    struct Issuer {
+        string name;
+        bool active;
+        uint64 addedAt;
+    }
     event IssuerAdded(address indexed signer, string name);
     event IssuerRemoved(address indexed signer);
     event IssuerUpdated(address indexed signer, string name, bool active);

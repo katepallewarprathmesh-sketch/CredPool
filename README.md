@@ -73,36 +73,40 @@ The mock KYC passcode used by the UI is `DEMO-PASS`. It is intentionally determi
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `npm test` | Contract and on-chain integration suite |
-| `npm run test:issuer` | VC issuance/encryption/storage and Pinata-adapter tests |
-| `npm run test:frontend` | Frontend build plus Playwright connect/verify/swap smoke tests |
-| `npm run test:foundry` | Foundry fuzz and invariant suite (requires Foundry) |
-| `npm run coverage` | Solidity coverage report |
-| `npm run gas` | Contract gas report |
-| `npm run demo` | Deploy and seed an ephemeral local demo |
-| `npm run deploy -- --network sepolia` | Deploy to Sepolia when environment credentials are supplied |
-| `npm run verify:sepolia` | Verify a recorded Sepolia deployment on Etherscan |
-| `npm --prefix frontend run build` | Type-check and build the frontend |
+| Command                                   | Purpose                                                                            |
+| ----------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm test`                                | Contract and on-chain integration suite                                            |
+| `npm run test:issuer`                     | VC issuance/encryption/storage and Pinata-adapter tests                            |
+| `npm run test:frontend`                   | Frontend build plus Playwright connect/verify/swap smoke tests                     |
+| `npm run test:foundry`                    | Foundry fuzz and invariant suite (requires Foundry)                                |
+| `npm run coverage`                        | Solidity coverage report                                                           |
+| `npm run gas`                             | Contract gas report                                                                |
+| `npm run demo`                            | Deploy and seed an ephemeral local demo                                            |
+| `npm run deploy -- --network sepolia`     | Deploy to Sepolia when environment credentials are supplied                        |
+| `npm run verify:sepolia`                  | Verify a recorded Sepolia deployment on Etherscan                                  |
+| `npm --prefix frontend run build`         | Type-check and build the frontend                                                  |
+| `npm run format` / `npm run format:check` | Format or verify Solidity, TypeScript, CSS, JSON, Markdown, and YAML               |
+| `npm run clean`                           | Remove generated artifacts, caches, coverage, local data, and test reports         |
+| `npm run clean:all`                       | Also remove installed dependencies; restore them later with both `npm ci` commands |
+| `npm run validate`                        | Run formatting, compile, Hardhat, issuer, and frontend build checks                |
 
 ## Access policy
 
 ### Minimum credential tier by operation
 
-| Operation | Minimum tier |
-|---|---:|
-| Swap | Basic (1) |
-| Add liquidity | Pro (2) |
-| Remove liquidity | Pro (2) |
+| Operation        | Minimum tier |
+| ---------------- | -----------: |
+| Swap             |    Basic (1) |
+| Add liquidity    |      Pro (2) |
+| Remove liquidity |      Pro (2) |
 
 ### Default swap limit by credential tier
 
-| Credential tier | Rolling 24-hour maximum |
-|---|---:|
-| Basic (1) | 1,000 token0-equivalent per rolling 24 hours |
-| Pro (2) | 50,000 token0-equivalent per rolling 24 hours |
-| Institutional (3) | Unlimited |
+| Credential tier   |                       Rolling 24-hour maximum |
+| ----------------- | --------------------------------------------: |
+| Basic (1)         |  1,000 token0-equivalent per rolling 24 hours |
+| Pro (2)           | 50,000 token0-equivalent per rolling 24 hours |
+| Institutional (3) |                                     Unlimited |
 
 LP shares are transferable, but redemption is always subject to a live Pro-or-higher credential. While paused, swaps and deposits stop; verified withdrawals remain available.
 

@@ -36,7 +36,8 @@ async function main() {
   await verify(d.token1, ["Demo EUR", "dEUR"]);
   await verify(d.pool, [d.token0, d.token1, d.accessBadge, d.deployer]);
   await verify(d.lpToken);
-  if (d.timelock) await verify(d.timelock, [BigInt(d.timelockDelay), [d.admin], [d.admin], d.deployer]);
+  if (d.timelock)
+    await verify(d.timelock, [BigInt(d.timelockDelay), [d.admin], [d.admin], d.deployer]);
 }
 
 main().catch((error) => {

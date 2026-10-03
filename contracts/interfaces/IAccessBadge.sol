@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 interface IAccessBadge {
-    struct Attestation { address subject; uint8 tier; bytes32 credentialHash; uint64 expiry; uint256 nonce; }
+    struct Attestation {
+        address subject;
+        uint8 tier;
+        bytes32 credentialHash;
+        uint64 expiry;
+        uint256 nonce;
+    }
     event BadgeClaimed(address indexed subject, uint8 tier, bytes32 credentialHash);
     function claim(Attestation calldata att, bytes calldata signature) external;
     function burnExpired(address account) external;

@@ -1,7 +1,9 @@
 import { ethers, network } from "hardhat";
 import { mkdir, writeFile } from "node:fs/promises";
 
-async function mined(tx: Promise<any>) { await (await tx).wait(); }
+async function mined(tx: Promise<any>) {
+  await (await tx).wait();
+}
 
 export async function deploy() {
   const [deployer] = await ethers.getSigners();
@@ -15,7 +17,9 @@ export async function deploy() {
   const Credentials = await ethers.getContractFactory("CredentialRegistry");
   const cr = await Credentials.deploy(await ir.getAddress(), deployer.address);
   await cr.waitForDeployment();
-  const badgeUri = process.env.BADGE_URI || "https://raw.githubusercontent.com/katepallewarprathmesh-sketch/CredPool/main/frontend/public/metadata/{id}.json";
+  const badgeUri =
+    process.env.BADGE_URI ||
+    "https://raw.githubusercontent.com/katepallewarprathmesh-sketch/CredPool/main/frontend/public/metadata/{id}.json";
   const Badge = await ethers.getContractFactory("AccessBadge");
   const badge = await Badge.deploy(await ir.getAddress(), await cr.getAddress(), badgeUri);
   await badge.waitForDeployment();
@@ -26,7 +30,12 @@ export async function deploy() {
   const token1 = await Token.deploy("Demo EUR", "dEUR");
   await Promise.all([token0.waitForDeployment(), token1.waitForDeployment()]);
   const Pool = await ethers.getContractFactory("GatedPool");
-  const pool = await Pool.deploy(await token0.getAddress(), await token1.getAddress(), await badge.getAddress(), deployer.address);
+  const pool = await Pool.deploy(
+    await token0.getAddress(),
+    await token1.getAddress(),
+    await badge.getAddress(),
+    deployer.address,
+  );
   await pool.waitForDeployment();
 
   let timelockAddress: string | null = null;
@@ -68,4 +77,8 @@ export async function deploy() {
   return { admin: deployer, ir, cr, badge, token0, token1, pool, addresses };
 }
 
-if (require.main === module) deploy().catch((error) => { console.error(error); process.exitCode = 1; });
+if (require.main === module)
+  deploy().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

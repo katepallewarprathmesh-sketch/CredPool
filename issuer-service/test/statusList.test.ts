@@ -12,11 +12,18 @@ describe("W3C Bitstring Status List", () => {
     const index = await store.reserve();
     const hash = `0x${"12".repeat(32)}`;
     await store.bind(hash, index);
-    expect(store.entry(index)).deep.include({ type: "BitstringStatusListEntry", statusListIndex: String(index) });
+    expect(store.entry(index)).deep.include({
+      type: "BitstringStatusListEntry",
+      statusListIndex: String(index),
+    });
     expect(await store.revoke(hash)).eq(index);
-    const credential: any = await store.credential("did:pkh:eip155:1:0x0000000000000000000000000000000000000001");
+    const credential: any = await store.credential(
+      "did:pkh:eip155:1:0x0000000000000000000000000000000000000001",
+    );
     expect(credential.type).includes("BitstringStatusListCredential");
     expect(credential.credentialSubject.encodedList).to.be.a("string").and.not.empty;
-    expect((await signCredentialJwt(Wallet.createRandom().privateKey, 1n, credential)).split(".")).length(3);
+    expect(
+      (await signCredentialJwt(Wallet.createRandom().privateKey, 1n, credential)).split("."),
+    ).length(3);
   });
 });

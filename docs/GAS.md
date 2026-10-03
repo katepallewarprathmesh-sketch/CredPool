@@ -8,12 +8,12 @@ Run with:
 npm run gas
 ```
 
-| Operation | Minimum | Maximum | Average |
-|---|---:|---:|---:|
-| `GatedPool.swap` | 102,717 | 128,085 | **108,571** |
-| `GatedPool.addLiquidity` | varies | varies | see reproducible report |
-| `GatedPool.removeLiquidity` | varies | varies | see reproducible report |
-| `AccessBadge.claim` | varies | varies | see reproducible report |
+| Operation                   | Minimum | Maximum |                 Average |
+| --------------------------- | ------: | ------: | ----------------------: |
+| `GatedPool.swap`            | 102,717 | 128,085 |             **108,571** |
+| `GatedPool.addLiquidity`    |  varies |  varies | see reproducible report |
+| `GatedPool.removeLiquidity` |  varies |  varies | see reproducible report |
+| `AccessBadge.claim`         |  varies |  varies | see reproducible report |
 
 The maximum measured swap, including live credential validation and rolling-window volume accounting, remains below the 130,000-gas target. The first swap in a new volume window costs more because it initializes packed accounting storage; subsequent swaps update the same slot.
 

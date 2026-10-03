@@ -41,14 +41,16 @@ export class PinataStorage implements EncryptedStorageAdapter {
       headers: { Authorization: `Bearer ${this.jwt}` },
       body: form,
     });
-    if (!response.ok) throw new Error(`Pinata upload failed (${response.status}): ${await response.text()}`);
-    const result = await response.json() as { IpfsHash?: string };
+    if (!response.ok)
+      throw new Error(`Pinata upload failed (${response.status}): ${await response.text()}`);
+    const result = (await response.json()) as { IpfsHash?: string };
     if (!result.IpfsHash) throw new Error("Pinata response did not contain IpfsHash");
     return result.IpfsHash;
   }
 
   async download(cid: string) {
-    if (!/^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]+)$/i.test(cid)) throw new Error("invalid IPFS CID");
+    if (!/^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]+)$/i.test(cid))
+      throw new Error("invalid IPFS CID");
     const base = this.gateway.replace(/\/$/, "");
     const response = await fetch(`${base}/ipfs/${cid}`, {
       headers: process.env.PINATA_GATEWAY_TOKEN
@@ -63,7 +65,8 @@ export class PinataStorage implements EncryptedStorageAdapter {
 export function storageFromEnv(): EncryptedStorageAdapter {
   const adapter = (process.env.STORAGE_ADAPTER || "local").toLowerCase();
   if (adapter === "local") return new LocalContentAddressedStorage();
-  if (adapter === "pinata") return new PinataStorage(process.env.PINATA_JWT || "", process.env.PINATA_GATEWAY_URL);
+  if (adapter === "pinata")
+    return new PinataStorage(process.env.PINATA_JWT || "", process.env.PINATA_GATEWAY_URL);
   throw new Error(`Unsupported STORAGE_ADAPTER: ${adapter}`);
 }
 
@@ -71,15 +74,21 @@ export function storageFromEnv(): EncryptedStorageAdapter {
 // HTTP issuance flow does not use it: production encryption happens in the
 // holder's browser with a wallet-signature-derived key before upload.
 export function encryptCredential(plaintext: string, holderSecret: string) {
-  const salt = randomBytes(16), iv = randomBytes(12), key = scryptSync(holderSecret, salt, 32);
+  const salt = randomBytes(16),
+    iv = randomBytes(12),
+    key = scryptSync(holderSecret, salt, 32);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return Buffer.concat([salt, iv, cipher.getAuthTag(), body]);
 }
 
 export function decryptCredential(blob: Buffer, holderSecret: string) {
-  const salt = blob.subarray(0, 16), iv = blob.subarray(16, 28), tag = blob.subarray(28, 44), body = blob.subarray(44);
-  const key = scryptSync(holderSecret, salt, 32), decipher = createDecipheriv("aes-256-gcm", key, iv);
+  const salt = blob.subarray(0, 16),
+    iv = blob.subarray(16, 28),
+    tag = blob.subarray(28, 44),
+    body = blob.subarray(44);
+  const key = scryptSync(holderSecret, salt, 32),
+    decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
 }

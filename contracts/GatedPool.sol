@@ -27,7 +27,10 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     uint16 public feeBps = 30;
     uint64 public constant VOLUME_WINDOW = 1 days;
     mapping(uint8 => uint256) public tierLimits;
-    struct VolumeWindow { uint64 startedAt; uint192 used; }
+    struct VolumeWindow {
+        uint64 startedAt;
+        uint192 used;
+    }
     mapping(address => VolumeWindow) public volumeWindows;
 
     error NotVerified(uint8 requiredTier);
@@ -47,7 +50,12 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     event TierLimitUpdated(uint8 tier, uint256 maxSwap);
 
     constructor(address token0_, address token1_, address badge_, address admin) {
-        if (token0_ == address(0) || token1_ == address(0) || token0_ == token1_ || badge_ == address(0)) {
+        if (
+            token0_ == address(0) ||
+            token1_ == address(0) ||
+            token0_ == token1_ ||
+            badge_ == address(0)
+        ) {
             revert InvalidToken();
         }
         token0 = IERC20(token0_);
@@ -82,11 +90,26 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         emit TierLimitUpdated(tier, maxSwap);
     }
 
-    function pause() external onlyRole(ADMIN_ROLE) { _pause(); }
-    function unpause() external onlyRole(ADMIN_ROLE) { _unpause(); }
+    function pause() external onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+    function unpause() external onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
 
-    function addLiquidity(uint256 a0d, uint256 a1d, uint256 a0min, uint256 a1min, uint256 deadline)
-        external nonReentrant whenNotPaused onlyVerified(2) beforeDeadline(deadline) returns (uint256 shares)
+    function addLiquidity(
+        uint256 a0d,
+        uint256 a1d,
+        uint256 a0min,
+        uint256 a1min,
+        uint256 deadline
+    )
+        external
+        nonReentrant
+        whenNotPaused
+        onlyVerified(2)
+        beforeDeadline(deadline)
+        returns (uint256 shares)
     {
         if (a0d == 0 || a1d == 0) revert InvalidAmount();
         uint256 a0;
@@ -123,8 +146,17 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         emit LiquidityAdded(msg.sender, a0, a1, shares);
     }
 
-    function removeLiquidity(uint256 shares, uint256 a0min, uint256 a1min, uint256 deadline)
-        external nonReentrant onlyVerified(2) beforeDeadline(deadline) returns (uint256 a0, uint256 a1)
+    function removeLiquidity(
+        uint256 shares,
+        uint256 a0min,
+        uint256 a1min,
+        uint256 deadline
+    )
+        external
+        nonReentrant
+        onlyVerified(2)
+        beforeDeadline(deadline)
+        returns (uint256 a0, uint256 a1)
     {
         if (shares == 0) revert InvalidAmount();
         uint256 supply = lpToken.totalSupply();
@@ -151,9 +183,12 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         return Math.mulDiv(amountWithFee, rOut, rIn * 10_000 + amountWithFee);
     }
 
-    function swap(address input, uint256 amountIn, uint256 minOut, uint256 deadline)
-        external nonReentrant whenNotPaused beforeDeadline(deadline) returns (uint256 out)
-    {
+    function swap(
+        address input,
+        uint256 amountIn,
+        uint256 minOut,
+        uint256 deadline
+    ) external nonReentrant whenNotPaused beforeDeadline(deadline) returns (uint256 out) {
         uint8 tier = badge.tierOf(msg.sender);
         if (tier < 1) revert NotVerified(1);
         return _swap(input, amountIn, minOut, tier);
@@ -184,7 +219,12 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         return uint256(window.used) >= limit ? 0 : limit - uint256(window.used);
     }
 
-    function _swap(address input, uint256 amountIn, uint256 minOut, uint8 tier) private returns (uint256 out) {
+    function _swap(
+        address input,
+        uint256 amountIn,
+        uint256 minOut,
+        uint8 tier
+    ) private returns (uint256 out) {
         uint256 equiv;
         if (input == address(token0)) {
             equiv = amountIn;
