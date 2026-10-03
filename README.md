@@ -146,7 +146,3 @@ Sepolia deployment requires `ADMIN_MULTISIG`. The deploy script creates `CredPoo
 ## Sepolia
 
 No private key, RPC endpoint, or Etherscan API key is committed. Set `SEPOLIA_RPC_URL`, `DEPLOYER_PK`, and `ETHERSCAN_API_KEY`, run the Sepolia deployment, then run `npm run verify:sepolia`. The deployment command automatically records addresses under `deployments/sepolia.json`. No production/mainnet use is intended.
-
-## License
-
-MIT
