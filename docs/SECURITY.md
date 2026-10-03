@@ -6,7 +6,7 @@ Review date: 2026-10-03
 
 - Solidity compiler 0.8.24 with optimizer and via-IR: pass
 - 46 Hardhat acceptance/integration tests: pass
-- Solidity coverage: **100% statements, 100% lines, 95.05% branches**
+- Solidity coverage: **100% statements, 100% lines, 95.98% branches**
 - Two issuer/storage tests, including the Pinata adapter boundary: pass
 - Two Playwright connect/verify/swap smoke tests: pass
 - Foundry: 512 fuzz runs plus 256 invariant runs × 64 calls (16,384 stateful calls), zero invariant reverts: pass.

@@ -122,8 +122,8 @@ The issuer can optionally embed W3C Bitstring Status List entries (`STATUS_LIST_
 - **6 issuer/API/storage tests**, including VC verification, revoke authentication, status lists, and the real Pinata adapter boundary
 - **2 Playwright smoke tests** covering wallet connect, verification, and swap states
 - Foundry: **512 fuzz cases** and **16,384 stateful invariant calls** for non-decreasing `k` and reserve backing
-- **100% Solidity statements and lines; 95.05% branch coverage**
-- Measured pool swap: **108,571 gas average** (102,717 minimum / 128,085 maximum), below the 130k target
+- **100% Solidity statements and lines; 95.98% branch coverage**
+- Measured pool swap: **110,480 gas average** (102,959 minimum / 130,718 maximum); `swapWithPermit`: **151,450 average** (141,395 minimum / 161,505 maximum)
 - Frontend production build passes
 - Local one-command demo passes
 
