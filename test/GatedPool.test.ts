@@ -292,8 +292,11 @@ describe("GatedPool hardening branches", () => {
     await expect(pool.setFee(25)).to.emit(pool, "FeeUpdated");
     await expect(pool.setTierLimit(0, 1)).revertedWithCustomError(pool, "InvalidAmount");
     await expect(pool.setTierLimit(3, 1)).revertedWithCustomError(pool, "InvalidAmount");
+    await expect(pool.setRollingCap(0, 1)).revertedWithCustomError(pool, "InvalidAmount");
+    await expect(pool.setRollingCap(3, 1)).revertedWithCustomError(pool, "InvalidAmount");
     await expect(pool.setRollingCap(1, 1n << 192n)).revertedWithCustomError(pool, "InvalidAmount");
     await expect(pool.setTierLimit(1, 0)).to.emit(pool, "TierLimitUpdated");
+    await expect(pool.unpause()).reverted;
     await pool.pause();
     await pool.unpause();
     await expect(pool.getAmountOut(await x.getAddress(), 0)).revertedWithCustomError(
@@ -341,6 +344,12 @@ describe("GatedPool hardening branches", () => {
       pool,
       "Swap",
     );
+    await pool.setRollingCap(1, 0);
+    await expect(pool.connect(basic).swap(await y.getAddress(), 1, 0, d)).revertedWithCustomError(
+      pool,
+      "LimitExceeded",
+    );
+    await pool.setRollingCap(1, ethers.parseEther("1000"));
     await pool.setTierLimit(1, 0);
     await expect(pool.connect(basic).swap(await y.getAddress(), 1, 0, d)).revertedWithCustomError(
       pool,
@@ -629,6 +638,10 @@ describe("Rolling limits and permit", () => {
         .connect(outsider)
         .swapWithPermit(await t0.getAddress(), 1, 0, d, 27, ethers.ZeroHash, ethers.ZeroHash),
     ).revertedWithCustomError(pool, "NotVerified");
+    await expect(pool.connect(outsider).removeLiquidity(1, 0, 0, d)).revertedWithCustomError(
+      pool,
+      "NotVerified",
+    );
     expect(await pool.remainingVolume(outsider.address)).eq(0);
   });
 });

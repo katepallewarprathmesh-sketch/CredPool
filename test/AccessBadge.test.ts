@@ -173,5 +173,6 @@ describe("EIP-5192 discovery", () => {
     const [, nonAdmin] = await ethers.getSigners();
     await expect(badge.connect(nonAdmin).setBaseURI("evil://")).reverted;
     await expect(badge.uri(0)).revertedWithCustomError(badge, "InvalidTier");
+    await expect(badge.uri(4)).revertedWithCustomError(badge, "InvalidTier");
   });
 });
