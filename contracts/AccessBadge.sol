@@ -6,7 +6,8 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IIssuerRegistry} from "./interfaces/IIssuerRegistry.sol";
 import {ICredentialRegistry} from "./interfaces/ICredentialRegistry.sol";
 import {IAccessBadge} from "./interfaces/IAccessBadge.sol";
-contract AccessBadge is ERC1155, EIP712, IAccessBadge {
+import {IERC5192} from "./interfaces/IERC5192.sol";
+contract AccessBadge is ERC1155, EIP712, IAccessBadge, IERC5192 {
     bytes32 public constant ATTESTATION_TYPEHASH = keccak256("Attestation(address subject,uint8 tier,bytes32 credentialHash,uint64 expiry,uint256 nonce)");
     IIssuerRegistry public immutable issuerRegistry; ICredentialRegistry public immutable credentialRegistry;
     mapping(address => uint256) public nonces; mapping(address => uint8) private _badgeTier;
@@ -20,8 +21,10 @@ contract AccessBadge is ERC1155, EIP712, IAccessBadge {
         unchecked { nonces[att.subject]++; }
         credentialRegistry.anchor(att.credentialHash, signer, att.subject, att.tier, att.expiry);
         uint8 oldTier = _badgeTier[att.subject]; if (oldTier != 0) _burn(att.subject, oldTier, 1);
-        _badgeTier[att.subject] = att.tier; _mint(att.subject, att.tier, 1, ""); emit BadgeClaimed(att.subject, att.tier, att.credentialHash);
+        _badgeTier[att.subject] = att.tier; _mint(att.subject, att.tier, 1, ""); emit Locked(att.tier); emit BadgeClaimed(att.subject, att.tier, att.credentialHash);
     }
+    function locked(uint256 tokenId) external pure returns (bool) { if (tokenId < 1 || tokenId > 3) revert InvalidTier(); return true; }
+    function supportsInterface(bytes4 interfaceId) public view override(ERC1155) returns (bool) { return interfaceId == type(IERC5192).interfaceId || super.supportsInterface(interfaceId); }
     function tierOf(address account) public view returns (uint8) { uint8 tier = _badgeTier[account]; if (tier == 0 || balanceOf(account, tier) == 0) return 0; bytes32 hash = credentialRegistry.activeCredentialOf(account); return credentialRegistry.isValid(hash) ? tier : 0; }
     function hasValidTier(address account, uint8 minTier) external view returns (bool) { return tierOf(account) >= minTier; }
     function burnExpired(address account) external { if (tierOf(account) != 0) revert CredentialStillValid(); uint8 tier = _badgeTier[account]; if (tier != 0 && balanceOf(account, tier) != 0) _burn(account, tier, 1); _badgeTier[account] = 0; }

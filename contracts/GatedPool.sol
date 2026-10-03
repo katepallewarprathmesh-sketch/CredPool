@@ -5,6 +5,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IAccessBadge} from "./interfaces/IAccessBadge.sol";
@@ -24,7 +25,10 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     uint256 public reserve0;
     uint256 public reserve1;
     uint16 public feeBps = 30;
+    uint64 public constant VOLUME_WINDOW = 1 days;
     mapping(uint8 => uint256) public tierLimits;
+    struct VolumeWindow { uint64 startedAt; uint192 used; }
+    mapping(address => VolumeWindow) public volumeWindows;
 
     error NotVerified(uint8 requiredTier);
     error Expired();
@@ -73,7 +77,7 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     }
 
     function setTierLimit(uint8 tier, uint256 maxSwap) external onlyRole(ADMIN_ROLE) {
-        if (tier < 1 || tier > 3) revert InvalidAmount();
+        if (tier < 1 || tier > 3 || maxSwap > type(uint192).max) revert InvalidAmount();
         tierLimits[tier] = maxSwap;
         emit TierLimitUpdated(tier, maxSwap);
     }
@@ -108,14 +112,14 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
             uint256 root = Math.sqrt(a0 * a1);
             if (root <= MINIMUM_LIQUIDITY) revert InsufficientLiquidity();
             shares = root - MINIMUM_LIQUIDITY;
-            lpToken.mint(LOCK, MINIMUM_LIQUIDITY);
         } else {
             shares = Math.min(Math.mulDiv(a0, supply, reserve0), Math.mulDiv(a1, supply, reserve1));
         }
         if (shares == 0) revert InsufficientLiquidity();
-        lpToken.mint(msg.sender, shares);
         reserve0 += a0;
         reserve1 += a1;
+        if (supply == 0) lpToken.mint(LOCK, MINIMUM_LIQUIDITY);
+        lpToken.mint(msg.sender, shares);
         emit LiquidityAdded(msg.sender, a0, a1, shares);
     }
 
@@ -128,9 +132,9 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         a1 = Math.mulDiv(shares, reserve1, supply);
         if (a0 < a0min || a1 < a1min) revert Slippage();
         if (a0 == 0 || a1 == 0) revert InsufficientLiquidity();
-        lpToken.burn(msg.sender, shares);
         reserve0 -= a0;
         reserve1 -= a1;
+        lpToken.burn(msg.sender, shares);
         token0.safeTransfer(msg.sender, a0);
         token1.safeTransfer(msg.sender, a1);
         emit LiquidityRemoved(msg.sender, a0, a1, shares);
@@ -148,9 +152,39 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     }
 
     function swap(address input, uint256 amountIn, uint256 minOut, uint256 deadline)
-        external nonReentrant whenNotPaused onlyVerified(1) beforeDeadline(deadline) returns (uint256 out)
+        external nonReentrant whenNotPaused beforeDeadline(deadline) returns (uint256 out)
     {
         uint8 tier = badge.tierOf(msg.sender);
+        if (tier < 1) revert NotVerified(1);
+        return _swap(input, amountIn, minOut, tier);
+    }
+
+    /// @notice Executes permit and swap atomically for EIP-2612-compatible input tokens.
+    function swapWithPermit(
+        address input,
+        uint256 amountIn,
+        uint256 minOut,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant whenNotPaused beforeDeadline(deadline) returns (uint256 out) {
+        uint8 tier = badge.tierOf(msg.sender);
+        if (tier < 1) revert NotVerified(1);
+        IERC20Permit(input).permit(msg.sender, address(this), amountIn, deadline, v, r, s);
+        return _swap(input, amountIn, minOut, tier);
+    }
+
+    function remainingVolume(address account) external view returns (uint256) {
+        uint8 tier = badge.tierOf(account);
+        if (tier == 3) return type(uint256).max;
+        uint256 limit = tierLimits[tier];
+        VolumeWindow memory window = volumeWindows[account];
+        if (block.timestamp >= uint256(window.startedAt) + VOLUME_WINDOW) return limit;
+        return uint256(window.used) >= limit ? 0 : limit - uint256(window.used);
+    }
+
+    function _swap(address input, uint256 amountIn, uint256 minOut, uint8 tier) private returns (uint256 out) {
         uint256 equiv;
         if (input == address(token0)) {
             equiv = amountIn;
@@ -159,8 +193,18 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         } else {
             equiv = Math.mulDiv(amountIn, reserve0, reserve1);
         }
-        uint256 limit = tierLimits[tier];
-        if (tier < 3 && (limit == 0 || equiv > limit)) revert LimitExceeded();
+        if (tier < 3) {
+            uint256 limit = tierLimits[tier];
+            VolumeWindow memory window = volumeWindows[msg.sender];
+            if (block.timestamp >= uint256(window.startedAt) + VOLUME_WINDOW) {
+                window.startedAt = uint64(block.timestamp);
+                window.used = 0;
+            }
+            uint256 nextUsed = uint256(window.used) + equiv;
+            if (limit == 0 || nextUsed > limit) revert LimitExceeded();
+            window.used = uint192(nextUsed);
+            volumeWindows[msg.sender] = window;
+        }
         out = getAmountOut(input, amountIn);
         if (out < minOut) revert Slippage();
         bool zero = input == address(token0);

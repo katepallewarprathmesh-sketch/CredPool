@@ -9,11 +9,11 @@ A permissioned constant-product AMM where a W3C Verifiable Credential, a live on
 - `did:pkh:eip155` identity derived from the connected wallet
 - JWT VC issuance plus a chain/contract-bound EIP-712 attestation
 - Active issuer and credential registries with immediate revocation
-- Soulbound Basic, Pro, and Institutional ERC-1155 badges
-- Constant-product AMM with a 0.30% configurable fee, slippage/deadline protection, tier limits, locked initial liquidity, pause, `SafeERC20`, and reentrancy protection
-- AES-256-GCM encrypted, content-addressed VC storage (local IPFS-compatible adapter for deterministic development)
+- Soulbound Basic, Pro, and Institutional ERC-1155 badges with EIP-5192/ERC-165 discovery and hosted metadata
+- Constant-product AMM with a 0.30% configurable fee, slippage/deadline protection, rolling 24-hour tier limits, EIP-2612 permit swaps, locked initial liquidity, pause, `SafeERC20`, and reentrancy protection
+- Holder-side AES-256-GCM encryption derived from a wallet signature; switchable local or real Pinata/IPFS persistence
 - React/Vite frontend for verification, swaps, liquidity, and credential history
-- Requirement-named contract and end-to-end tests
+- Requirement-named Hardhat tests, Foundry fuzz/invariant tests, and Playwright wallet/verification/swap smoke tests
 
 ## Architecture
 
@@ -76,7 +76,9 @@ The mock KYC passcode used by the UI is `DEMO-PASS`. It is intentionally determi
 | Command | Purpose |
 |---|---|
 | `npm test` | Contract and on-chain integration suite |
-| `npm run test:issuer` | VC issuance/encryption/storage E2E test |
+| `npm run test:issuer` | VC issuance/encryption/storage and Pinata-adapter tests |
+| `npm run test:frontend` | Frontend build plus Playwright connect/verify/swap smoke tests |
+| `npm run test:foundry` | Foundry fuzz and invariant suite (requires Foundry) |
 | `npm run coverage` | Solidity coverage report |
 | `npm run gas` | Contract gas report |
 | `npm run demo` | Deploy and seed an ephemeral local demo |
@@ -96,28 +98,46 @@ The mock KYC passcode used by the UI is `DEMO-PASS`. It is intentionally determi
 
 ### Default swap limit by credential tier
 
-| Credential tier | Maximum swap per transaction |
+| Credential tier | Rolling 24-hour maximum |
 |---|---:|
-| Basic (1) | 1,000 token0-equivalent |
-| Pro (2) | 50,000 token0-equivalent |
+| Basic (1) | 1,000 token0-equivalent per rolling 24 hours |
+| Pro (2) | 50,000 token0-equivalent per rolling 24 hours |
 | Institutional (3) | Unlimited |
 
 LP shares are transferable, but redemption is always subject to a live Pro-or-higher credential. While paused, swaps and deposits stop; verified withdrawals remain available.
 
 ## Credential privacy
 
-Only a credential hash and non-personal access metadata are put on-chain. The service canonicalizes the VC payload before hashing and encrypts the payload with AES-256-GCM before storage. The included storage adapter is local and content-addressed so tests do not rely on a third party. Replace `issuer-service/src/storage.ts` with Pinata/Helia in hosted deployments while preserving its encrypt-before-upload boundary.
+Only a credential hash and non-personal access metadata are put on-chain. The service canonicalizes the VC payload before hashing. The holder signs a deterministic, account-and-chain-bound message in the browser; that signature derives a non-exportable AES-256-GCM key. Plaintext never reaches the storage endpoint. The encrypted blob can be stored by the deterministic local adapter or pinned to real IPFS through Pinata. Set `STORAGE_ADAPTER=pinata`, `PINATA_JWT`, and optionally `PINATA_GATEWAY_URL`. The holder signs again to decrypt a downloaded credential locally.
+
+The issuer can optionally embed W3C Bitstring Status List entries (`STATUS_LIST_ENABLED=true`) for cheap off-chain revocation checks. On-chain pool access still uses immediate registry revocation. JWT credentials are verified through `did-jwt-vc` and DID resolution; `did:pkh` is the default and `did:ethr` can be enabled with `DID_METHOD=ethr`.
 
 ## Test status
 
-- 42 Hardhat tests, including every acceptance ID in the specification
-- Issuer/encrypted-storage E2E test
-- 100% Solidity statements and lines; **90.23% branch coverage**
-- Measured pool swap: **110,225 gas average** (110,017 minimum / 110,593 maximum), below the 130k target
+- **46 Hardhat tests**, including every acceptance ID, rolling-volume bypass protection, permit swaps, and EIP-5192
+- **6 issuer/API/storage tests**, including VC verification, revoke authentication, status lists, and the real Pinata adapter boundary
+- **2 Playwright smoke tests** covering wallet connect, verification, and swap states
+- Foundry: **512 fuzz cases** and **16,384 stateful invariant calls** for non-decreasing `k` and reserve backing
+- **100% Solidity statements and lines; 95.05% branch coverage**
+- Measured pool swap: **108,571 gas average** (102,717 minimum / 128,085 maximum), below the 130k target
 - Frontend production build passes
 - Local one-command demo passes
 
 See [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/GAS.md`](docs/GAS.md), and the normative [`docs/SPEC.md`](docs/SPEC.md).
+
+## Production storage
+
+```bash
+STORAGE_ADAPTER=pinata
+PINATA_JWT=your-fine-grained-pinata-jwt
+PINATA_GATEWAY_URL=https://your-gateway.mypinata.cloud
+```
+
+`POST /storage/upload` accepts ciphertext only. `STORAGE_ADAPTER=local` remains the deterministic default for tests and local demos.
+
+## Governance
+
+Sepolia deployment requires `ADMIN_MULTISIG`. The deploy script creates `CredPoolTimelock`, assigns proposer/executor authority to that multisig, transfers registry and pool admin roles to the timelock, and renounces the deployer's admin roles. `TIMELOCK_DELAY` defaults to 86,400 seconds on Sepolia.
 
 ## Sepolia
 

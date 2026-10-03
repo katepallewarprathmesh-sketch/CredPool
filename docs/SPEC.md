@@ -104,7 +104,7 @@ Institutions want DeFi liquidity but need to restrict who can trade or provide l
 | FR-GP-2 | Swap fee MUST default to 0.30% and be configurable by admin within [0.01%, 1%]. |
 | FR-GP-3 | `swap`, `addLiquidity`, `removeLiquidity` MUST all be guarded by `onlyVerified(minTier)`. |
 | FR-GP-4 | Minimum tier: swap requires **Basic+**, add/remove liquidity requires **Pro+**. |
-| FR-GP-5 | Per-transaction swap limit by tier (configurable): Basic 1,000, Pro 50,000, Institutional unlimited (in token0-equivalent units). |
+| FR-GP-5 | Rolling 24-hour swap-volume limit per holder by tier (configurable): Basic 1,000, Pro 50,000, Institutional unlimited (in token0-equivalent units). |
 | FR-GP-6 | LP shares MUST be an internal ERC-20 (`GatedLP`). Transfers of LP tokens MAY be allowed, but `removeLiquidity` still requires a valid badge. |
 | FR-GP-7 | `swap` MUST take `minAmountOut` and `deadline`, and revert on violation. |
 | FR-GP-8 | The first liquidity provider MUST lock `MINIMUM_LIQUIDITY` (1000 wei of shares) permanently. |
@@ -358,6 +358,7 @@ Each ID below MUST exist as a named test (`it("AB-SOUL-1: ...")`).
 - **GP-ACCESS-2** Basic can swap but cannot add liquidity.
 - **GP-ACCESS-3** Pro and Institutional can do both.
 - **GP-LIMIT-1** Basic swap above the limit reverts `LimitExceeded`; Institutional is unlimited.
+- **GP-LIMIT-2** Splitting volume across multiple swaps cannot bypass the rolling 24-hour limit; capacity resets after the window.
 - **GP-REVOKE-1** After revocation, a previously verified user's swap reverts.
 - **GP-ISSUER-1** After the issuer is removed, all its holders lose access.
 - **GP-LP-1** First deposit mints `sqrt(a*b) - MINIMUM_LIQUIDITY` shares.
@@ -471,9 +472,9 @@ Update this table whenever a requirement is added or changed. A requirement with
 
 ## 14. Open questions (decide before Phase 3)
 
-1. Should Institutional-tier users bypass swap limits entirely, or have a very high cap? (Spec assumes unlimited.)
-2. Should LP tokens be transferable to unverified addresses? (Spec allows it, but removal still requires a badge.)
-3. Single-issuer or multi-issuer attestations per credential (e.g. 2-of-3 issuers)? (Spec assumes single.)
-4. Use `did:pkh` only, or also support `did:ethr` resolution via `ethr-did-resolver`? (Spec assumes `did:pkh` for v1.)
+1. Should Institutional-tier users bypass swap limits entirely, or have a very high cap? (Spec assumes unlimited. **Decision 2026-10-03:** unlimited; institutional volume is not written to rolling-limit storage.)
+2. Should LP tokens be transferable to unverified addresses? (Spec allows it, but removal still requires a badge. **Decision 2026-10-03:** transferable LP tokens; redemption remains credential-gated.)
+3. Single-issuer or multi-issuer attestations per credential (e.g. 2-of-3 issuers)? (Spec assumes single. **Decision 2026-10-03:** single active issuer signature per credential for v1.)
+4. Use `did:pkh` only, or also support `did:ethr` resolution via `ethr-did-resolver`? (Spec assumes `did:pkh` for v1. **Decision 2026-10-03:** `did:pkh` remains the default; optional `did:ethr` issuance and resolution are supported via configuration.)
 
 Record each decision here with date and rationale, then update the affected requirement IDs.

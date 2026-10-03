@@ -12,3 +12,7 @@ frontend/dist/
 .data/
 *.tsbuildinfo
 deployments/hardhat.json
+frontend/test-results/
+frontend/playwright-report/
+out-forge/
+broadcast/
