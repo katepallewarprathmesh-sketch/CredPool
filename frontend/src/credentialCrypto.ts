@@ -1,5 +1,11 @@
 import type { Signer } from "ethers";
 
+/**
+ * Wallet-signature-derived keys avoid deprecated wallet encryption RPCs and keep
+ * plaintext out of storage. The account and chain are domain-bound; recovery
+ * requires a wallet that produces the same deterministic EIP-191 signature.
+ * The tradeoff is that wallets with randomized signatures cannot recover the key.
+ */
 async function holderKey(signer: Signer, account: string, chain: bigint, usage: KeyUsage[]) {
   const proof = await signer.signMessage(
     `CredPool credential encryption key\nAccount: ${account.toLowerCase()}\nChain: ${chain}`,

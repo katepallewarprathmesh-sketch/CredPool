@@ -8,6 +8,10 @@ async function mined(tx: Promise<any>) {
 export async function deploy() {
   const [deployer] = await ethers.getSigners();
   const isPublic = network.name === "sepolia";
+  if (isPublic) {
+    for (const name of ["SEPOLIA_RPC_URL", "DEPLOYER_PK", "ETHERSCAN_API_KEY"])
+      if (!process.env[name]) throw new Error(`${name} is required for Sepolia deployment`);
+  }
   const admin = process.env.ADMIN || process.env.ADMIN_MULTISIG;
   const guardian = process.env.GUARDIAN_ADDRESS || admin;
   if (isPublic && !admin) throw new Error("ADMIN or ADMIN_MULTISIG is required for Sepolia");

@@ -13,7 +13,12 @@ test.beforeEach(async ({ page }) => {
         removeListener() {},
         async request({ method, params }: any) {
           if (method === "eth_requestAccounts" || method === "eth_accounts") return [account];
-          if (method === "eth_chainId") return "0xaa36a7";
+          if (method === "eth_chainId")
+            return localStorage.getItem("wrong-network") ? "0x1" : "0xaa36a7";
+          if (method === "wallet_switchEthereumChain") {
+            localStorage.removeItem("wrong-network");
+            return null;
+          }
           if (method === "personal_sign" || method === "eth_signTypedData_v4")
             return `0x${"11".repeat(64)}1b`;
           if (method === "eth_blockNumber") return "0x10";
@@ -125,6 +130,23 @@ test("connects a wallet and displays its DID", async ({ page }) => {
   await page.locator("header").getByRole("button", { name: "Connect wallet" }).click();
   await expect(page.getByText(/did:pkh:eip155:11155111/)).toBeVisible();
   await expect(page.getByText("Basic", { exact: true })).toBeVisible();
+});
+
+test("switches from the wrong network in one click", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("wrong-network", "1"));
+  await page.locator("header").getByRole("button", { name: "Connect wallet" }).click();
+  await expect(page.getByText("Wrong network", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Switch network" }).click();
+  await expect(page.getByText("Wrong network", { exact: true })).not.toBeVisible();
+});
+
+test("shows gated liquidity and the rolling allowance", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("header").getByRole("button", { name: "Connect wallet" }).click();
+  await expect(page.getByTestId("remaining-allowance")).toContainText("Rolling-window allowance");
+  await page.getByRole("button", { name: "liquidity" }).click();
+  await expect(page.getByText("Credential required")).toBeVisible();
 });
 
 test("shows credential verification and swap transaction states", async ({ page }) => {

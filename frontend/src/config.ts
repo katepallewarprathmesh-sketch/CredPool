@@ -15,6 +15,7 @@ export const poolAbi = [
   "function swapWithPermit(address,uint256,uint256,uint256,uint8,bytes32,bytes32) returns(uint256)",
   "function addLiquidity(uint256,uint256,uint256,uint256,uint256) returns(uint256)",
   "function removeLiquidity(uint256,uint256,uint256,uint256) returns(uint256,uint256)",
+  "function remainingVolume(address) view returns(uint256)",
 ] as const;
 
 export const erc20Abi = [

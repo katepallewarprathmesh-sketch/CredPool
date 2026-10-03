@@ -311,3 +311,19 @@ footer {
 .network-error span {
   color: #d9a980;
 }
+
+.skeleton {
+  color: transparent;
+  min-height: 3.5rem;
+  background: linear-gradient(90deg, #182034 25%, #263149 50%, #182034 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.2s infinite linear;
+}
+@keyframes skeleton-pulse {
+  to {
+    background-position: -200% 0;
+  }
+}
+.network-error button {
+  margin-left: auto;
+}

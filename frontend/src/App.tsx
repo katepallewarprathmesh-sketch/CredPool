@@ -16,6 +16,18 @@ declare global {
   }
 }
 
+type TxStatus = "idle" | "pending" | "confirmed" | "failed";
+
+function friendlyError(error: any) {
+  const message = String(error?.revert?.name || error?.shortMessage || error?.message || error);
+  if (message.includes("NotVerified")) return "A valid credential is required for this action.";
+  if (message.includes("Expired"))
+    return "The transaction or credential has expired. Please retry.";
+  if (message.includes("LimitExceeded"))
+    return "Your tier allowance for this rolling window is exhausted.";
+  return message;
+}
+
 type CredentialRecord = {
   credentialHash: string;
   cid: string;
@@ -35,26 +47,52 @@ export default function App() {
   const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState("");
   const [slippage, setSlip] = useState("0.5");
+  const [remaining, setRemaining] = useState("");
+  const [loadingIdentity, setLoadingIdentity] = useState(false);
+  const [txStatus, setTxStatus] = useState<TxStatus>("idle");
   const [creds, setCreds] = useState<CredentialRecord[]>(() =>
     JSON.parse(localStorage.getItem("credentials") || "[]"),
   );
   const badge = (): any => new Contract(env.VITE_ACCESS_BADGE_ADDRESS, badgeAbi, provider);
   const pool = (): any => new Contract(env.VITE_POOL_ADDRESS, poolAbi, provider);
+  async function refreshAllowance(p: BrowserProvider, a: string) {
+    const value = await new Contract(env.VITE_POOL_ADDRESS, poolAbi, p).remainingVolume(a);
+    setRemaining(value === (1n << 256n) - 1n ? "Unlimited" : `${formatUnits(value, 18)} Token A`);
+  }
   async function connect() {
     if (!window.ethereum) return setMsg("Install MetaMask to continue");
-    const p = new BrowserProvider(window.ethereum),
-      [a] = await p.send("eth_requestAccounts", []);
-    setProvider(p);
-    setAccount(a);
-    const connectedChain = (await p.getNetwork()).chainId;
-    setChain(connectedChain);
-    setWrongNetwork(connectedChain !== expectedChain);
-    if (connectedChain !== expectedChain) {
-      setTier(0);
-      setMsg(`Wrong network. Switch your wallet to chain ${expectedChain}.`);
-      return;
+    setLoadingIdentity(true);
+    try {
+      const p = new BrowserProvider(window.ethereum),
+        [a] = await p.send("eth_requestAccounts", []);
+      setProvider(p);
+      setAccount(a);
+      const connectedChain = (await p.getNetwork()).chainId;
+      setChain(connectedChain);
+      setWrongNetwork(connectedChain !== expectedChain);
+      if (connectedChain !== expectedChain) {
+        setTier(0);
+        return;
+      }
+      setTier(Number(await new Contract(env.VITE_ACCESS_BADGE_ADDRESS, badgeAbi, p).tierOf(a)));
+      await refreshAllowance(p, a);
+    } catch (error) {
+      setMsg(friendlyError(error));
+    } finally {
+      setLoadingIdentity(false);
     }
-    setTier(Number(await new Contract(env.VITE_ACCESS_BADGE_ADDRESS, badgeAbi, p).tierOf(a)));
+  }
+  async function switchNetwork() {
+    if (!window.ethereum) return;
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: `0x${expectedChain.toString(16)}` }],
+      });
+      await connect();
+    } catch (error) {
+      setMsg(friendlyError(error));
+    }
   }
   useEffect(() => localStorage.setItem("credentials", JSON.stringify(creds)), [creds]);
   useEffect(() => {
@@ -137,7 +175,10 @@ export default function App() {
       const verification = await fetch(`${issuerUrl}/credentials/verify`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ vcJwt: x.vcJwt }),
+        body: JSON.stringify({
+          vcJwt: x.vcJwt,
+          holder: account,
+        }),
       });
       if (!verification.ok)
         throw Error((await verification.json()).error || "VC verification failed");
@@ -165,10 +206,11 @@ export default function App() {
       ]);
       setMsg("Verification complete — encrypted by your wallet");
     } catch (e: any) {
-      setMsg(e.shortMessage || e.message);
+      setMsg(friendlyError(e));
     }
   }
   async function swap() {
+    setTxStatus("pending");
     try {
       const signer = await provider!.getSigner(),
         a = parseUnits(amount, 18),
@@ -210,9 +252,12 @@ export default function App() {
           .connect(signer)
           .swapWithPermit(env.VITE_TOKEN0_ADDRESS, a, min, deadline, sig.v, sig.r, sig.s)
       ).wait();
+      setTxStatus("confirmed");
       setMsg("Swap confirmed");
+      await refreshAllowance(provider!, account);
     } catch (e: any) {
-      setMsg(e.shortMessage || e.message);
+      setTxStatus("failed");
+      setMsg(friendlyError(e));
     }
   }
   async function liquidity(add = true) {
@@ -267,6 +312,9 @@ export default function App() {
           <div className="network-error">
             <b>Wrong network</b>
             <span>Switch your wallet to chain {expectedChain.toString()} to use CredPool.</span>
+            <button className="secondary" onClick={switchNetwork}>
+              Switch network
+            </button>
           </div>
         )}
         <section className="hero">
@@ -278,7 +326,8 @@ export default function App() {
           </h1>
           <p>Trade and provide liquidity using privacy-preserving verifiable credentials.</p>
         </section>
-        {account && (
+        {loadingIdentity && <div className="identity skeleton">Loading wallet identity…</div>}
+        {account && !loadingIdentity && (
           <div className="identity">
             <div>
               <small>CONNECTED IDENTITY</small>
@@ -308,12 +357,24 @@ export default function App() {
               <input disabled value={quote} />
               <b>Token B</b>
             </div>
+            {account && tier > 0 && (
+              <p className="muted" data-testid="remaining-allowance">
+                Rolling-window allowance: {remaining || "Loading…"}
+              </p>
+            )}
             <button
               className="primary"
-              disabled={!account || wrongNetwork || tier < 1 || !amount}
+              data-status={txStatus}
+              disabled={!account || wrongNetwork || tier < 1 || !amount || txStatus === "pending"}
               onClick={swap}
             >
-              {!account ? "Connect wallet" : tier < 1 ? "Basic credential required" : "Review swap"}
+              {!account
+                ? "Connect wallet"
+                : tier < 1
+                  ? "Basic credential required"
+                  : txStatus === "pending"
+                    ? "Transaction pending…"
+                    : "Review swap"}
             </button>
           </section>
         )}

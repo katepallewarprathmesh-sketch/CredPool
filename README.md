@@ -143,6 +143,14 @@ PINATA_GATEWAY_URL=https://your-gateway.mypinata.cloud
 
 Sepolia deployment requires `ADMIN_MULTISIG`. The deploy script creates `CredPoolTimelock`, assigns proposer/executor authority to that multisig, transfers registry and pool admin roles to the timelock, and renounces the deployer's admin roles. `TIMELOCK_DELAY` defaults to 86,400 seconds on Sepolia.
 
+## Issuer API hardening
+
+Revocation requests use an EIP-191 signature from an active issuer and include a timestamp and one-time nonce; bearer admin tokens are not accepted. Request bodies are validated with Zod, issuance/status endpoints have IP and address/credential rate limits, and errors use stable `code` plus `error` fields. `EnvSigner` is intentionally demo-only; set `KMS_KEY_ID` only after implementing the provided `KmsSigner` integration seam.
+
+Storage is selected with `STORAGE_BACKEND=local|pinata|helia`. Pinata and Helia wrap ciphertext in a SHA-256 integrity envelope and verify it on download. The browser derives a non-exportable AES-GCM key from a deterministic, account-and-chain-bound wallet signature. This keeps stored content holder-controlled, but recovery depends on the wallet reproducing the same EIP-191 signature.
+
+After a Sepolia deployment and issuer registration, run `npm run sanity:sepolia` with `ISSUER_ADDRESS` to verify roles and contract wiring.
+
 ## Sepolia
 
 No private key, RPC endpoint, or Etherscan API key is committed. Set `SEPOLIA_RPC_URL`, `DEPLOYER_PK`, and `ETHERSCAN_API_KEY`, run the Sepolia deployment, then run `npm run verify:sepolia`. The deployment command automatically records addresses under `deployments/sepolia.json`. No production/mainnet use is intended.

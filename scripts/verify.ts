@@ -27,6 +27,9 @@ async function verify(address: string, constructorArguments: unknown[] = []) {
 }
 
 async function main() {
+  if (network.name === "sepolia")
+    for (const name of ["SEPOLIA_RPC_URL", "DEPLOYER_PK", "ETHERSCAN_API_KEY"])
+      if (!process.env[name]) throw new Error(`${name} is required for Sepolia verification`);
   const file = `deployments/${network.name}.json`;
   const d: Deployment = JSON.parse(await readFile(file, "utf8"));
   await verify(d.issuerRegistry, [d.deployer]);

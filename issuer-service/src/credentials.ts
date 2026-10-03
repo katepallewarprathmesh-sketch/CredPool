@@ -1,7 +1,6 @@
-import { Wallet, keccak256, toUtf8Bytes, getBytes } from "ethers";
+import { keccak256, toUtf8Bytes } from "ethers";
 import canonicalize from "canonicalize";
-import { createVerifiableCredentialJwt } from "did-jwt-vc";
-import { ES256KSigner } from "did-jwt";
+import { EnvSigner, type IssuerSigner } from "./signer";
 export const attestationTypes = {
   Attestation: [
     { name: "subject", type: "address" },
@@ -24,19 +23,16 @@ export const issuerDid = (
   address: string,
   method = process.env.DID_METHOD || "pkh",
 ) => holderDid(chainId, address, method);
-export async function signCredentialJwt(privateKey: string, chainId: bigint, payload: unknown) {
-  const wallet = new Wallet(privateKey);
-  return createVerifiableCredentialJwt(
-    payload as any,
-    {
-      did: issuerDid(chainId, wallet.address),
-      signer: ES256KSigner(getBytes(privateKey)),
-    } as any,
-    { removeOriginalFields: false },
-  );
+export async function signCredentialJwt(
+  signerOrKey: IssuerSigner | string,
+  chainId: bigint,
+  payload: unknown,
+) {
+  const signer = typeof signerOrKey === "string" ? new EnvSigner(signerOrKey) : signerOrKey;
+  return signer.signCredentialJwt(chainId, payload);
 }
 export async function issueCredential(
-  privateKey: string,
+  signerOrKey: IssuerSigner | string,
   address: string,
   tier: number,
   chainId: bigint,
@@ -52,11 +48,12 @@ export async function issueCredential(
   },
 ) {
   if (![1, 2, 3].includes(tier)) throw new Error("tier must be 1, 2, or 3");
-  const wallet = new Wallet(privateKey);
+  const signer = typeof signerOrKey === "string" ? new EnvSigner(signerOrKey) : signerOrKey;
+  const signerAddress = await signer.getAddress();
   const now = Math.floor(Date.now() / 1000),
     expiry = now + validitySeconds;
   const subject = holderDid(chainId, address),
-    issuer = issuerDid(chainId, wallet.address);
+    issuer = issuerDid(chainId, signerAddress);
   const vcPayload = {
     sub: subject,
     nbf: now,
@@ -74,13 +71,9 @@ export async function issueCredential(
   const canonical = canonicalize(vcPayload);
   if (!canonical) throw new Error("canonicalization failed");
   const credentialHash = keccak256(toUtf8Bytes(canonical));
-  const vcJwt = await createVerifiableCredentialJwt(
-    vcPayload as any,
-    { did: issuer, signer: ES256KSigner(getBytes(privateKey)) } as any,
-    { removeOriginalFields: false },
-  );
+  const vcJwt = await signer.signCredentialJwt(chainId, vcPayload);
   const attestation = { subject: address, tier, credentialHash, expiry, nonce };
-  const signature = await wallet.signTypedData(
+  const signature = await signer.signTypedData(
     {
       name: "GatedAccess",
       version: "1",
