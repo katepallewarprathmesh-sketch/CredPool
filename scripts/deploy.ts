@@ -8,8 +8,10 @@ async function mined(tx: Promise<any>) {
 export async function deploy() {
   const [deployer] = await ethers.getSigners();
   const isPublic = network.name === "sepolia";
-  const multisig = process.env.ADMIN_MULTISIG;
-  if (isPublic && !multisig) throw new Error("ADMIN_MULTISIG is required for public deployments");
+  const admin = process.env.ADMIN || process.env.ADMIN_MULTISIG;
+  const guardian = process.env.GUARDIAN_ADDRESS || admin;
+  if (isPublic && !admin) throw new Error("ADMIN or ADMIN_MULTISIG is required for Sepolia");
+  if (isPublic && !guardian) throw new Error("GUARDIAN_ADDRESS is required for Sepolia");
 
   const Issuers = await ethers.getContractFactory("IssuerRegistry");
   const ir = await Issuers.deploy(deployer.address);
@@ -19,13 +21,13 @@ export async function deploy() {
   await cr.waitForDeployment();
   const badgeUri =
     process.env.BADGE_URI ||
-    "https://raw.githubusercontent.com/katepallewarprathmesh-sketch/CredPool/main/frontend/public/metadata/{id}.json";
+    "https://raw.githubusercontent.com/katepallewarprathmesh-sketch/CredPool/main/frontend/public/metadata/";
   const Badge = await ethers.getContractFactory("AccessBadge");
   const badge = await Badge.deploy(await ir.getAddress(), await cr.getAddress(), badgeUri);
   await badge.waitForDeployment();
   await mined(cr.grantRole(await cr.BADGE_ROLE(), await badge.getAddress()));
 
-  const Token = await ethers.getContractFactory("MockERC20");
+  const Token = await ethers.getContractFactory("MockERC20Permit");
   const token0 = await Token.deploy("Demo USD", "dUSD");
   const token1 = await Token.deploy("Demo EUR", "dEUR");
   await Promise.all([token0.waitForDeployment(), token1.waitForDeployment()]);
@@ -40,18 +42,25 @@ export async function deploy() {
 
   let timelockAddress: string | null = null;
   const delay = BigInt(process.env.TIMELOCK_DELAY || (isPublic ? "86400" : "0"));
-  if (multisig) {
+  if (admin) {
     const Timelock = await ethers.getContractFactory("CredPoolTimelock");
-    const timelock = await Timelock.deploy(delay, [multisig], [multisig], deployer.address);
+    const timelock = await Timelock.deploy(delay, [admin], [admin], deployer.address);
     await timelock.waitForDeployment();
     timelockAddress = await timelock.getAddress();
 
-    for (const controlled of [ir, cr, pool]) {
+    // Emergency actions deliberately bypass the delay but cannot change parameters.
+    await mined(ir.grantRole(await ir.ISSUER_GUARDIAN_ROLE(), guardian));
+    await mined(pool.grantRole(await pool.GUARDIAN_ROLE(), guardian));
+
+    for (const controlled of [ir, cr, pool, badge]) {
       await mined(controlled.grantRole(await controlled.DEFAULT_ADMIN_ROLE(), timelockAddress));
       await mined(controlled.grantRole(await controlled.ADMIN_ROLE(), timelockAddress));
       await mined(controlled.renounceRole(await controlled.ADMIN_ROLE(), deployer.address));
       await mined(controlled.renounceRole(await controlled.DEFAULT_ADMIN_ROLE(), deployer.address));
     }
+
+    await mined(ir.renounceRole(await ir.ISSUER_GUARDIAN_ROLE(), deployer.address));
+    await mined(pool.renounceRole(await pool.GUARDIAN_ROLE(), deployer.address));
     await mined(timelock.renounceRole(await timelock.DEFAULT_ADMIN_ROLE(), deployer.address));
   }
 
@@ -59,7 +68,8 @@ export async function deploy() {
     network: network.name,
     chainId: (await ethers.provider.getNetwork()).chainId.toString(),
     deployer: deployer.address,
-    admin: multisig || deployer.address,
+    admin: admin || deployer.address,
+    guardian: guardian || deployer.address,
     timelock: timelockAddress,
     timelockDelay: delay.toString(),
     badgeUri,

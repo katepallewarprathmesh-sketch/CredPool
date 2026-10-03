@@ -291,8 +291,8 @@ describe("GatedPool hardening branches", () => {
     await expect(pool.setFee(101)).revertedWithCustomError(pool, "InvalidFee");
     await expect(pool.setFee(25)).to.emit(pool, "FeeUpdated");
     await expect(pool.setTierLimit(0, 1)).revertedWithCustomError(pool, "InvalidAmount");
-    await expect(pool.setTierLimit(4, 1)).revertedWithCustomError(pool, "InvalidAmount");
-    await expect(pool.setTierLimit(1, 1n << 192n)).revertedWithCustomError(pool, "InvalidAmount");
+    await expect(pool.setTierLimit(3, 1)).revertedWithCustomError(pool, "InvalidAmount");
+    await expect(pool.setRollingCap(1, 1n << 192n)).revertedWithCustomError(pool, "InvalidAmount");
     await expect(pool.setTierLimit(1, 0)).to.emit(pool, "TierLimitUpdated");
     await pool.pause();
     await pool.unpause();
@@ -398,7 +398,8 @@ describe("Remaining pool branches", () => {
 
 describe("Rolling limits and permit", () => {
   async function fx() {
-    const [admin, issuer, lp, basic, outsider] = await ethers.getSigners();
+    const [admin, issuer, lp, basic, outsider, institutional, secondBasic] =
+      await ethers.getSigners();
     const ir = await (await ethers.getContractFactory("IssuerRegistry")).deploy(admin.address);
     await ir.addIssuer(issuer.address, "Issuer");
     const cr = await (
@@ -412,6 +413,8 @@ describe("Rolling limits and permit", () => {
     for (const [w, t, l] of [
       [lp, 2, "lp-roll"],
       [basic, 1, "basic-roll"],
+      [institutional, 3, "institutional-roll"],
+      [secondBasic, 1, "second-basic-roll"],
     ] as any) {
       const att = {
         subject: w.address,
@@ -422,7 +425,7 @@ describe("Rolling limits and permit", () => {
       };
       await badge.claim(att, await sign(issuer, await badge.getAddress(), chain, att));
     }
-    const T = await ethers.getContractFactory("MockERC20"),
+    const T = await ethers.getContractFactory("MockERC20Permit"),
       t0 = await T.deploy("USD A", "A"),
       t1 = await T.deploy("USD B", "B"),
       pool = await (
@@ -433,7 +436,7 @@ describe("Rolling limits and permit", () => {
         await badge.getAddress(),
         admin.address,
       );
-    for (const w of [lp, basic])
+    for (const w of [lp, basic, outsider, institutional, secondBasic])
       for (const t of [t0, t1]) {
         await t.mint(w.address, ethers.parseEther("2000000"));
         await t.connect(w).approve(await pool.getAddress(), ethers.MaxUint256);
@@ -442,7 +445,19 @@ describe("Rolling limits and permit", () => {
     await pool
       .connect(lp)
       .addLiquidity(ethers.parseEther("1000000"), ethers.parseEther("1000000"), 0, 0, d);
-    return { admin, lp, basic, outsider, t0, t1, pool, chain, d };
+    return {
+      admin,
+      lp,
+      basic,
+      outsider,
+      institutional,
+      secondBasic,
+      t0,
+      t1,
+      pool,
+      chain,
+      d,
+    };
   }
   it("GP-LIMIT-2: split swaps cannot bypass the rolling 24-hour Basic limit", async () => {
     const { basic, t0, pool, d } = await loadFixture(fx);
@@ -459,6 +474,36 @@ describe("Rolling limits and permit", () => {
       pool.connect(basic).swap(await t0.getAddress(), ethers.parseEther("1000"), 0, d),
     ).to.emit(pool, "Swap");
   });
+  it("enforces per-transaction and configurable per-address rolling limits", async () => {
+    const { admin, basic, secondBasic, institutional, t0, pool, d } = await loadFixture(fx);
+    await pool.setTierLimit(1, ethers.parseEther("700"));
+    await pool.setRollingCap(1, ethers.parseEther("900"));
+    await expect(
+      pool.connect(basic).swap(await t0.getAddress(), ethers.parseEther("701"), 0, d),
+    ).revertedWithCustomError(pool, "LimitExceeded");
+    await pool.connect(basic).swap(await t0.getAddress(), ethers.parseEther("500"), 0, d);
+
+    // The same cap is independent for every holder.
+    await pool.connect(secondBasic).swap(await t0.getAddress(), ethers.parseEther("500"), 0, d);
+    expect(await pool.remainingVolume(secondBasic.address)).eq(ethers.parseEther("400"));
+    expect(await pool.remainingVolume(basic.address)).eq(ethers.parseEther("400"));
+
+    await expect(pool.connect(basic).setVolumeWindow(60)).reverted;
+    await expect(pool.connect(admin).setVolumeWindow(0)).revertedWithCustomError(
+      pool,
+      "InvalidAmount",
+    );
+    await expect(pool.connect(admin).setVolumeWindow(60)).to.emit(pool, "VolumeWindowUpdated");
+    await time.increase(61);
+    expect(await pool.remainingVolume(basic.address)).eq(ethers.parseEther("900"));
+
+    // Institutional holders remain unlimited by both checks.
+    await expect(
+      pool.connect(institutional).swap(await t0.getAddress(), ethers.parseEther("1000"), 0, d),
+    ).to.emit(pool, "Swap");
+    expect(await pool.remainingVolume(institutional.address)).eq(ethers.MaxUint256);
+  });
+
   it("GP-PERMIT-1: EIP-2612 permit and swap execute atomically", async () => {
     const { basic, t0, pool, chain, d } = await loadFixture(fx);
     const amount = ethers.parseEther("10"),
@@ -492,6 +537,58 @@ describe("Rolling limits and permit", () => {
     ).to.emit(pool, "Swap");
     expect(await t0.allowance(basic.address, await pool.getAddress())).eq(0);
   });
+  it("handles expired, consumed, and invalid permits safely", async () => {
+    const { basic, t0, pool, chain, d } = await loadFixture(fx);
+    const amount = ethers.parseEther("10"),
+      poolAddress = await pool.getAddress(),
+      tokenAddress = await t0.getAddress(),
+      domain = { name: "USD A", version: "1", chainId: chain, verifyingContract: tokenAddress },
+      types = {
+        Permit: [
+          { name: "owner", type: "address" },
+          { name: "spender", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
+        ],
+      };
+    const signPermit = async (deadline: number) =>
+      ethers.Signature.from(
+        await basic.signTypedData(domain, types, {
+          owner: basic.address,
+          spender: poolAddress,
+          value: amount,
+          nonce: await t0.nonces(basic.address),
+          deadline,
+        }),
+      );
+
+    const expired = (await time.latest()) - 1,
+      expiredSig = await signPermit(expired);
+    await expect(
+      pool
+        .connect(basic)
+        .swapWithPermit(tokenAddress, amount, 0, expired, expiredSig.v, expiredSig.r, expiredSig.s),
+    ).revertedWithCustomError(pool, "Expired");
+
+    const consumed = await signPermit(d);
+    await t0
+      .connect(basic)
+      .permit(basic.address, poolAddress, amount, d, consumed.v, consumed.r, consumed.s);
+    await expect(
+      pool
+        .connect(basic)
+        .swapWithPermit(tokenAddress, amount, 0, d, consumed.v, consumed.r, consumed.s),
+    ).to.emit(pool, "Swap");
+
+    await t0.connect(basic).approve(poolAddress, 0);
+    await expect(
+      pool
+        .connect(basic)
+        .swapWithPermit(tokenAddress, amount, 0, d, 27, ethers.ZeroHash, ethers.ZeroHash),
+    ).revertedWithCustomError(pool, "PermitFailed");
+  });
+
   it("covers remaining admin, pause, deadline and liquidity bound branches", async () => {
     const { admin, lp, basic, outsider, t0, t1, pool, d } = await loadFixture(fx);
     await expect(pool.connect(basic).setTierLimit(1, 1)).reverted;

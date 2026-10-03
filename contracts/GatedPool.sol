@@ -15,6 +15,7 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
     uint256 public constant MINIMUM_LIQUIDITY = 1000;
     address private constant LOCK = address(0xdead);
 
@@ -25,11 +26,12 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     uint256 public reserve0;
     uint256 public reserve1;
     uint16 public feeBps = 30;
-    uint64 public constant VOLUME_WINDOW = 1 days;
+    uint64 public volumeWindow = 1 days;
     mapping(uint8 => uint256) public tierLimits;
+    mapping(uint8 => uint256) public rollingCaps;
     struct VolumeWindow {
-        uint64 startedAt;
-        uint192 used;
+        uint64 windowStart;
+        uint192 volumeUsed;
     }
     mapping(address => VolumeWindow) public volumeWindows;
 
@@ -42,12 +44,15 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     error InvalidFee();
     error InvalidAmount();
     error FeeOnTransferUnsupported();
+    error PermitFailed();
 
     event Swap(address indexed user, address tokenIn, uint256 amountIn, uint256 amountOut);
     event LiquidityAdded(address indexed user, uint256 amount0, uint256 amount1, uint256 shares);
     event LiquidityRemoved(address indexed user, uint256 amount0, uint256 amount1, uint256 shares);
     event FeeUpdated(uint16 feeBps);
     event TierLimitUpdated(uint8 tier, uint256 maxSwap);
+    event RollingCapUpdated(uint8 tier, uint256 cap);
+    event VolumeWindowUpdated(uint64 window);
 
     constructor(address token0_, address token1_, address badge_, address admin) {
         if (
@@ -64,8 +69,11 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
         lpToken = new GatedLP();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
+        _grantRole(GUARDIAN_ROLE, admin);
         tierLimits[1] = 1_000 ether;
         tierLimits[2] = 50_000 ether;
+        rollingCaps[1] = 1_000 ether;
+        rollingCaps[2] = 50_000 ether;
     }
 
     modifier beforeDeadline(uint256 deadline) {
@@ -85,15 +93,27 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     }
 
     function setTierLimit(uint8 tier, uint256 maxSwap) external onlyRole(ADMIN_ROLE) {
-        if (tier < 1 || tier > 3 || maxSwap > type(uint192).max) revert InvalidAmount();
+        if (tier < 1 || tier > 2) revert InvalidAmount();
         tierLimits[tier] = maxSwap;
         emit TierLimitUpdated(tier, maxSwap);
     }
 
-    function pause() external onlyRole(ADMIN_ROLE) {
+    function setRollingCap(uint8 tier, uint256 cap) external onlyRole(ADMIN_ROLE) {
+        if (tier < 1 || tier > 2 || cap > type(uint192).max) revert InvalidAmount();
+        rollingCaps[tier] = cap;
+        emit RollingCapUpdated(tier, cap);
+    }
+
+    function setVolumeWindow(uint64 value) external onlyRole(ADMIN_ROLE) {
+        if (value == 0) revert InvalidAmount();
+        volumeWindow = value;
+        emit VolumeWindowUpdated(value);
+    }
+
+    function pause() external onlyRole(GUARDIAN_ROLE) {
         _pause();
     }
-    function unpause() external onlyRole(ADMIN_ROLE) {
+    function unpause() external onlyRole(GUARDIAN_ROLE) {
         _unpause();
     }
 
@@ -206,17 +226,22 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
     ) external nonReentrant whenNotPaused beforeDeadline(deadline) returns (uint256 out) {
         uint8 tier = badge.tierOf(msg.sender);
         if (tier < 1) revert NotVerified(1);
-        IERC20Permit(input).permit(msg.sender, address(this), amountIn, deadline, v, r, s);
+        try
+            IERC20Permit(input).permit(msg.sender, address(this), amountIn, deadline, v, r, s)
+        {} catch {
+            if (IERC20(input).allowance(msg.sender, address(this)) < amountIn)
+                revert PermitFailed();
+        }
         return _swap(input, amountIn, minOut, tier);
     }
 
     function remainingVolume(address account) external view returns (uint256) {
         uint8 tier = badge.tierOf(account);
         if (tier == 3) return type(uint256).max;
-        uint256 limit = tierLimits[tier];
+        uint256 cap = rollingCaps[tier];
         VolumeWindow memory window = volumeWindows[account];
-        if (block.timestamp >= uint256(window.startedAt) + VOLUME_WINDOW) return limit;
-        return uint256(window.used) >= limit ? 0 : limit - uint256(window.used);
+        if (block.timestamp >= uint256(window.windowStart) + volumeWindow) return cap;
+        return uint256(window.volumeUsed) >= cap ? 0 : cap - uint256(window.volumeUsed);
     }
 
     function _swap(
@@ -234,15 +259,17 @@ contract GatedPool is AccessControl, Pausable, ReentrancyGuard {
             equiv = Math.mulDiv(amountIn, reserve0, reserve1);
         }
         if (tier < 3) {
-            uint256 limit = tierLimits[tier];
+            uint256 transactionLimit = tierLimits[tier];
+            if (transactionLimit == 0 || equiv > transactionLimit) revert LimitExceeded();
+            uint256 cap = rollingCaps[tier];
             VolumeWindow memory window = volumeWindows[msg.sender];
-            if (block.timestamp >= uint256(window.startedAt) + VOLUME_WINDOW) {
-                window.startedAt = uint64(block.timestamp);
-                window.used = 0;
+            if (block.timestamp >= uint256(window.windowStart) + volumeWindow) {
+                window.windowStart = uint64(block.timestamp);
+                window.volumeUsed = 0;
             }
-            uint256 nextUsed = uint256(window.used) + equiv;
-            if (limit == 0 || nextUsed > limit) revert LimitExceeded();
-            window.used = uint192(nextUsed);
+            uint256 nextUsed = uint256(window.volumeUsed) + equiv;
+            if (cap == 0 || nextUsed > cap) revert LimitExceeded();
+            window.volumeUsed = uint192(nextUsed);
             volumeWindows[msg.sender] = window;
         }
         out = getAmountOut(input, amountIn);

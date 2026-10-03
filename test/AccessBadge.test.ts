@@ -160,12 +160,18 @@ describe("EIP-5192 discovery", () => {
       ).deploy(await ir.getAddress(), a.address),
       badge = await (
         await ethers.getContractFactory("AccessBadge")
-      ).deploy(await ir.getAddress(), await cr.getAddress(), "https://example.test/{id}.json");
+      ).deploy(await ir.getAddress(), await cr.getAddress(), "https://example.test/");
     expect(await badge.supportsInterface("0x01ffc9a7")).true;
+    expect(await badge.supportsInterface("0xd9b67a26")).true;
     expect(await badge.supportsInterface("0xb45a3c0e")).true;
     for (const id of [1, 2, 3]) expect(await badge.locked(id)).true;
     await expect(badge.locked(0)).revertedWithCustomError(badge, "InvalidTier");
     await expect(badge.locked(4)).revertedWithCustomError(badge, "InvalidTier");
-    expect(await badge.uri(1)).eq("https://example.test/{id}.json");
+    expect(await badge.uri(1)).eq("https://example.test/1.json");
+    await expect(badge.setBaseURI("ipfs://tiers/")).to.emit(badge, "BaseURIUpdated");
+    expect(await badge.uri(3)).eq("ipfs://tiers/3.json");
+    const [, nonAdmin] = await ethers.getSigners();
+    await expect(badge.connect(nonAdmin).setBaseURI("evil://")).reverted;
+    await expect(badge.uri(0)).revertedWithCustomError(badge, "InvalidTier");
   });
 });
