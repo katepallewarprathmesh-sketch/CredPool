@@ -112,7 +112,7 @@ LP shares are transferable, but redemption is always subject to a live Pro-or-hi
 
 ## Credential privacy
 
-Only a credential hash and non-personal access metadata are put on-chain. The service canonicalizes the VC payload before hashing. The holder signs a deterministic, account-and-chain-bound message in the browser; that signature derives a non-exportable AES-256-GCM key. Plaintext never reaches the storage endpoint. The encrypted blob can be stored by the deterministic local adapter or pinned to real IPFS through Pinata. Set `STORAGE_ADAPTER=pinata`, `PINATA_JWT`, and optionally `PINATA_GATEWAY_URL`. The holder signs again to decrypt a downloaded credential locally.
+Only a credential hash and non-personal access metadata are put on-chain. The service canonicalizes the VC payload before hashing. The holder signs a deterministic, account-and-chain-bound message in the browser; that signature derives a non-exportable AES-256-GCM key. Plaintext never reaches the storage endpoint. The encrypted blob can be stored by the deterministic local adapter pinned to real IPFS through Pinata, or written through an embedded Helia node. Set `STORAGE_BACKEND=pinata`, `PINATA_JWT`, and optionally `PINATA_GATEWAY_URL`. The holder signs again to decrypt a downloaded credential locally.
 
 The issuer can optionally embed W3C Bitstring Status List entries (`STATUS_LIST_ENABLED=true`) for cheap off-chain revocation checks. On-chain pool access still uses immediate registry revocation. JWT credentials are verified through `did-jwt-vc` and DID resolution; `did:pkh` is the default and `did:ethr` can be enabled with `DID_METHOD=ethr`.
 
@@ -132,12 +132,12 @@ See [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/GAS.md`](docs/GAS.md), and th
 ## Production storage
 
 ```bash
-STORAGE_ADAPTER=pinata
+STORAGE_BACKEND=pinata
 PINATA_JWT=your-fine-grained-pinata-jwt
 PINATA_GATEWAY_URL=https://your-gateway.mypinata.cloud
 ```
 
-`POST /storage/upload` accepts ciphertext only. `STORAGE_ADAPTER=local` remains the deterministic default for tests and local demos.
+`POST /storage/upload` accepts ciphertext only. `STORAGE_BACKEND=local` remains the deterministic default for tests and local demos.
 
 ## Governance
 

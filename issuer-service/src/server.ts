@@ -74,7 +74,10 @@ app.post("/storage/upload", sensitiveLimiter, async (req, res) => {
     const ciphertext = Buffer.from(encoded, "base64");
     if (ciphertext.length < 29) throw new Error("encrypted credential is too short");
     const cid = await uploadEncrypted(ciphertext);
-    res.status(201).json({ cid, adapter: process.env.STORAGE_ADAPTER || "local" });
+    res.status(201).json({
+      cid,
+      adapter: process.env.STORAGE_BACKEND || process.env.STORAGE_ADAPTER || "local",
+    });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

@@ -1,10 +1,34 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync, createHash } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  scryptSync,
+  createHash,
+  timingSafeEqual,
+} from "node:crypto";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 
 export interface EncryptedStorageAdapter {
   upload(blob: Buffer): Promise<string>;
   download(cid: string): Promise<Buffer>;
+}
+
+const ENVELOPE_MAGIC = Buffer.from("CP01");
+
+/** Adds an authenticated content digest outside the already-encrypted payload. */
+function envelope(blob: Buffer) {
+  return Buffer.concat([ENVELOPE_MAGIC, createHash("sha256").update(blob).digest(), blob]);
+}
+
+function openEnvelope(value: Buffer) {
+  if (value.length < 36 || !value.subarray(0, 4).equals(ENVELOPE_MAGIC))
+    throw new Error("stored ciphertext envelope is invalid");
+  const expected = value.subarray(4, 36),
+    blob = value.subarray(36),
+    actual = createHash("sha256").update(blob).digest();
+  if (!timingSafeEqual(expected, actual)) throw new Error("stored ciphertext failed content check");
+  return blob;
 }
 
 export class LocalContentAddressedStorage implements EncryptedStorageAdapter {
@@ -19,7 +43,10 @@ export class LocalContentAddressedStorage implements EncryptedStorageAdapter {
 
   async download(cid: string) {
     if (!/^bafy[a-f0-9]{64}$/.test(cid)) throw new Error("invalid local CID");
-    return readFile(path.join(this.root, cid));
+    const blob = await readFile(path.join(this.root, cid));
+    const actual = "bafy" + createHash("sha256").update(blob).digest("hex");
+    if (actual !== cid) throw new Error("stored ciphertext failed content check");
+    return blob;
   }
 }
 
@@ -29,12 +56,13 @@ export class PinataStorage implements EncryptedStorageAdapter {
     private readonly jwt: string,
     private readonly gateway = "https://gateway.pinata.cloud",
   ) {
-    if (!jwt) throw new Error("PINATA_JWT is required when STORAGE_ADAPTER=pinata");
+    if (!jwt) throw new Error("PINATA_JWT is required when STORAGE_BACKEND=pinata");
   }
 
   async upload(blob: Buffer) {
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(blob)]), "credential.vc.enc");
+    const wrapped = envelope(blob),
+      form = new FormData();
+    form.append("file", new Blob([new Uint8Array(wrapped)]), "credential.vc.enc");
     form.append("pinataMetadata", JSON.stringify({ name: `credpool-${Date.now()}.vc.enc` }));
     const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: "POST",
@@ -58,21 +86,67 @@ export class PinataStorage implements EncryptedStorageAdapter {
         : undefined,
     });
     if (!response.ok) throw new Error(`IPFS download failed (${response.status})`);
-    return Buffer.from(await response.arrayBuffer());
+    return openEnvelope(Buffer.from(await response.arrayBuffer()));
+  }
+}
+
+type UnixFsLike = {
+  addBytes(bytes: Uint8Array): Promise<{ toString(): string }>;
+  cat(cid: unknown): AsyncIterable<Uint8Array>;
+};
+
+const nativeImport = new Function("specifier", "return import(specifier)") as (
+  specifier: string,
+) => Promise<any>;
+
+/** Embedded IPFS node. An injectable UnixFS surface keeps its contract tests offline. */
+export class HeliaStorage implements EncryptedStorageAdapter {
+  private fs?: UnixFsLike;
+
+  constructor(fs?: UnixFsLike) {
+    this.fs = fs;
+  }
+
+  private async unixfs() {
+    if (this.fs) return this.fs;
+    const [{ createHelia }, { unixfs }] = await Promise.all([
+      nativeImport("helia"),
+      nativeImport("@helia/unixfs"),
+    ]);
+    this.fs = unixfs(await createHelia()) as UnixFsLike;
+    return this.fs;
+  }
+
+  async upload(blob: Buffer) {
+    return (await (await this.unixfs()).addBytes(envelope(blob))).toString();
+  }
+
+  async download(cid: string) {
+    const { CID } = await nativeImport("multiformats/cid"),
+      chunks: Buffer[] = [];
+    for await (const chunk of (await this.unixfs()).cat(CID.parse(cid)))
+      chunks.push(Buffer.from(chunk));
+    return openEnvelope(Buffer.concat(chunks));
   }
 }
 
 export function storageFromEnv(): EncryptedStorageAdapter {
-  const adapter = (process.env.STORAGE_ADAPTER || "local").toLowerCase();
-  if (adapter === "local") return new LocalContentAddressedStorage();
-  if (adapter === "pinata")
+  // STORAGE_ADAPTER remains a backward-compatible alias for v1.1 deployments.
+  const backend = (
+    process.env.STORAGE_BACKEND ||
+    process.env.STORAGE_ADAPTER ||
+    "local"
+  ).toLowerCase();
+  if (backend === "local") return new LocalContentAddressedStorage();
+  if (backend === "pinata")
     return new PinataStorage(process.env.PINATA_JWT || "", process.env.PINATA_GATEWAY_URL);
-  throw new Error(`Unsupported STORAGE_ADAPTER: ${adapter}`);
+  if (backend === "helia") return new HeliaStorage();
+  throw new Error(`Unsupported STORAGE_BACKEND: ${backend}`);
 }
 
-// Server-side encryption remains available for tests and migration tooling. The
-// HTTP issuance flow does not use it: production encryption happens in the
-// holder's browser with a wallet-signature-derived key before upload.
+// The holder's browser is the encryption boundary in the HTTP flow. The issuer
+// only receives authenticated ciphertext. These helpers remain for offline tests
+// and migration tooling; production storage adapters never receive plaintext.
 export function encryptCredential(plaintext: string, holderSecret: string) {
   const salt = randomBytes(16),
     iv = randomBytes(12),
