@@ -35,6 +35,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
+      # Foundry imports OpenZeppelin from node_modules. Download only that package
+      # instead of installing the entire Node toolchain again in this job.
+      - name: Install OpenZeppelin contracts
+        run: |
+          mkdir -p node_modules/@openzeppelin/contracts
+          curl --fail --location --silent --show-error \
+            https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-5.1.0.tgz \
+            | tar --extract --gzip --strip-components=1 \
+                --directory=node_modules/@openzeppelin/contracts
       - run: forge test -vv
 
   frontend:
