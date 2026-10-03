@@ -10,6 +10,9 @@ export const badgeAbi = [
 ] as const;
 
 export const poolAbi = [
+  "error NotVerified(uint8 requiredTier)",
+  "error Expired()",
+  "error LimitExceeded()",
   "function getAmountOut(address,uint256) view returns(uint256)",
   "function swap(address,uint256,uint256,uint256) returns(uint256)",
   "function swapWithPermit(address,uint256,uint256,uint256,uint8,bytes32,bytes32) returns(uint256)",

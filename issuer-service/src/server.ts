@@ -161,11 +161,13 @@ app.post("/credentials/verify", ipLimiter, async (req, res) => {
           new JsonRpcProvider(process.env.RPC_URL),
         ),
         record = await registry.get(input.credentialHash);
+      const didIssuerAddress = verified.issuer.split(":").at(-1)?.toLowerCase();
       if (
         record.issuer === ethersZeroAddress ||
+        record.issuer.toLowerCase() !== didIssuerAddress ||
         record.subject.toLowerCase() !== input.holder?.toLowerCase()
       )
-        throw new Error("on-chain credential does not match holder");
+        throw new Error("on-chain credential does not match issuer or holder");
     }
     res.json({ valid: true, ...verified });
   } catch (error) {
