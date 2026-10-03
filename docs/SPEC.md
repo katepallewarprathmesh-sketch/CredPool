@@ -1,4 +1,4 @@
-# Credential-Gated DeFi Pools: Specification
+# CredPool: Credential-Gated DeFi Pools — Specification
 
 **Status:** Draft v1.0
 **Stack:** Solidity ^0.8.24, Hardhat, OpenZeppelin v5, Ethers.js v6, Node.js/TypeScript, IPFS (Pinata or Helia), did-jwt-vc / Veramo
@@ -179,7 +179,7 @@ The issuer signs the attestation. `AccessBadge.claim` recovers the signer, check
 ### 5.3 Repository layout
 
 ```
-gated-defi/
+CredPool/
 ├── contracts/
 │   ├── interfaces/
 │   │   ├── IIssuerRegistry.sol

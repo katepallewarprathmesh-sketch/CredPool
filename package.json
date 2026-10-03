@@ -1,5 +1,5 @@
 {
-  "name": "credential-gated-defi",
+  "name": "credpool",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -12,7 +12,8 @@
     "issuer": "tsx issuer-service/src/server.ts",
     "frontend": "npm --prefix frontend run dev",
     "test:issuer": "mocha --require tsx/cjs issuer-service/test/**/*.test.ts",
-    "test:all": "npm test && npm run test:issuer"
+    "test:all": "npm test && npm run test:issuer",
+    "verify:sepolia": "hardhat run scripts/verify.ts --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
